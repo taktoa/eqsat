@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE CPP       #-}
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds    #-}
+{-# LANGUAGE TypeFamilies #-}
 
 --------------------------------------------------------------------------------
 
@@ -20,109 +20,36 @@ import qualified Data.Set          as Set
 import           Data.Vector       (Vector)
 import qualified Data.Vector       as Vector
 import           Data.Void         (Void)
-import qualified GHC.TypeLits      as TE
 
 --------------------------------------------------------------------------------
-
--- `fixme` is for "holes" in the program; these holes should exist even in a
--- real implementation of equality saturation; `undefined` is for places where
--- I was too lazy to actually write the code. If Haskell had better support for
--- parameterized modules (module functors), I would just use those.
 
 fixme :: any
 fixme = error "FIXME: this value should be defined by the user of this library!"
 
 data FIXMEType
--- #define FIXMEType (TE.TypeError (TE.Text "FIXME: this type should be defined by the user of this library!"))
 
 --------------------------------------------------------------------------------
 
--- These are abstract types that we are postulating; the aforementioned "holes"
--- in this library.
+newtype Fix f
+  = Fix { unFix :: f (Fix f) }
 
--- A type of variables.
--- This could be a string or an integer or something else entirely, as long as
--- it is orderable / comparable for equality.
-data Variable = Variable FIXMEType
+-- data ReferentiallyTransparent (expr :: * -> *)
 
--- A type of expressions in your referentially transparent AST.
-data Expr = Expr FIXMEType
-
--- A type of vertex labels in a program expression graph. For a referentially
--- transparent language, this will generally be something roughly like the type
--- of AST nodes (`Expr`), except without any recursion, since that is included
--- via the edges of the graph.
+-- class ( Ord (Variable expr), Ord (expr ())
+--       ) => ReferentiallyTransparent (expr :: * -> *) where
+--   -- Convert an `Expr` to a `ClosedTerm` (defined later) by converting each AST
+--   -- node to the associated `PEGNode` constructor and then recursing on the
+--   -- children.
+--   exprToTerm :: Fix expr -> ClosedTerm expr
 --
--- For example, if you have a simple arithmetic language:
---
---     data TrigType = Sin | Cos | Tan | Sec | Csc | Cot
---     data Expr = Number Double        -- numeric literals
---               | Negate Expr          -- unary negation
---               | Plus   [Expr]        -- variadic plus
---               | Times  Expr Expr     -- binary multiplication
---               | Trig   TrigType Expr -- unary trigonometric functions
---
--- then the definition of `PEGNode` would look like:
---
---     data PEGNode = PEGNumber Double
---                  | PEGNegate
---                  | PEGPlus
---                  | PEGTimes
---                  | PEGTrig TrigType
---
--- Note that this means that the graph may not be
---
--- Also, a convenient way to define `PEGNode` is by defining `Expr` using open
--- value recursion (i.e.: by taking the fixed point of a functor `Expr'`) and
--- then defining `PEGNode = Expr' ()`. For example:
---
---     newtype Fix f = Fix { unFix :: f (Fix f) }
---     data Expr' e = Number Double | Negate e | Plus [e] | Times e e
---     type Expr = Fix Expr'
---     type PEGNode = Expr' ()
---
--- Interestingly, when you use this approach with an AST that has variadic
--- nodes (e.g.: `Plus`), the resulting `PEGNode` will contain a value of
--- type `[()]` that is essentially a unary number encoding the number of
--- children that node has. This complicates some things but simplifies others,
--- so you will have to decide whether it makes sense for your AST.
-data PEGNode = PEGNode FIXMEType
-
---------------------------------------------------------------------------------
-
--- Here we postulate some values and typeclass instances on our abstract types.
-
--- `Variable`s must be testable for equality
-instance Eq Variable where
-  (==) = fixme
-
--- `Variable`s must be orderable (so they can be put in `Set`s)
-instance Ord Variable where
-  compare = fixme
-
--- `PEGNode`s must be testable for equality
-instance Eq PEGNode where
-  (==) = fixme
-
--- `PEGNode`s must be orderable (so they can be put in `Set`s)
-instance Ord PEGNode where
-  compare = fixme
-
--- Convert an `Expr` to a `ClosedTerm` (defined later) by converting each AST
--- node to the associated `PEGNode` constructor and then recursing on the
--- children.
-exprToTerm :: Expr -> ClosedTerm
-exprToTerm = fixme
-
--- Parse a `ClosedTerm` (defined later) back into an `Expr`.
--- This function should essentially just recurse over the tree, converting the
--- `PEGNode` into its associated `Expr` constructor and ensuring that the
--- number of children is appropriate to the constructor.
---
--- Laws:
---   * For any `e ∈ Expr`, `termToExpr (exprToTerm e) ≡ Right e`.
-termToExpr :: ClosedTerm -> Either SomeException Expr
-termToExpr = fixme
+--   -- Parse a `ClosedTerm` (defined later) back into an `Expr`.
+--   -- This function should essentially just recurse over the tree, converting the
+--   -- `PEGNode` into its associated `Expr` constructor and ensuring that the
+--   -- number of children is appropriate to the constructor.
+--   --
+--   -- Laws:
+--   --   * For any `e ∈ Expr`, `termToExpr (exprToTerm e) ≡ Right e`.
+--   termToExpr :: ClosedTerm expr -> Either SomeException (Fix expr)
 
 --------------------------------------------------------------------------------
 
@@ -155,6 +82,10 @@ instance Ord (GraphNode v e)
 -- The graph with no vertices or edges.
 emptyGraph :: Graph v e
 emptyGraph = undefined
+
+-- Return all the nodes in the given graph, in the order they were added.
+graphNodes :: Graph v e -> [GraphNode v e]
+graphNodes = undefined
 
 -- Given a graph and a vertex label, add a fresh node to the graph with that
 -- label and return a reference to it.
@@ -351,6 +282,10 @@ epegAddEquivalence (a, b) epeg
 -- distinct.
 pegToEPEG :: PEG -> EPEG
 pegToEPEG peg = MkEPEG peg (\_ _ -> False)
+
+matchPattern :: (Ord var) => Term var -> EPEG -> Map var EPEG
+matchPattern (MkVarTerm var) epeg = Map.singleton var epeg
+matchPattern (MkNodeTerm node children) epeg = undefined
 
 -- Given a set of equations and an EPEG, this will return a new EPEG that is the
 -- result of matching and applying one of the equations to the EPEG. If there is
