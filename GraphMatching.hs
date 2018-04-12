@@ -1,3 +1,5 @@
+--------------------------------------------------------------------------------
+
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -6,7 +8,13 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 
-module GraphMatching where
+--------------------------------------------------------------------------------
+
+module GraphMatching
+  ( module GraphMatching -- FIXME: explicit export list
+  ) where
+
+--------------------------------------------------------------------------------
 
 import           Control.Monad
 import           Control.Monad.Primitive
@@ -54,11 +62,10 @@ import qualified Data.ByteString                  as BS
 
 import           Flow                             ((.>), (|>))
 
-import qualified AdaptiveSort
-
 import           MutableBitmap                    (MutableBitmap)
 import qualified MutableBitmap
 
+--------------------------------------------------------------------------------
 
 type UMVector s a = UMVector.MVector s a
 
@@ -110,6 +117,4 @@ mgraphToAdjacencyMatrix_ :: (PrimMonad m)
                          -> m (Maybe (Matrix I))
 mgraphToAdjacencyMatrix_ = Graph.freeze >=> graphToAdjacencyMatrix_
 
-main :: IO ()
-main = do
-  pure ()
+--------------------------------------------------------------------------------
