@@ -1,7 +1,13 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DataKinds    #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
 
 --------------------------------------------------------------------------------
 
@@ -21,6 +27,11 @@ import           Data.Vector       (Vector)
 import qualified Data.Vector       as Vector
 import           Data.Void         (Void)
 
+import           Data.SBV          (SInteger, Symbolic)
+import qualified Data.SBV          as SBV
+
+import           Flow              ((.>), (|>))
+
 --------------------------------------------------------------------------------
 
 fixme :: any
@@ -30,26 +41,9 @@ data FIXMEType
 
 --------------------------------------------------------------------------------
 
-newtype Fix f
-  = Fix { unFix :: f (Fix f) }
-
--- data ReferentiallyTransparent (expr :: * -> *)
-
--- class ( Ord (Variable expr), Ord (expr ())
---       ) => ReferentiallyTransparent (expr :: * -> *) where
---   -- Convert an `Expr` to a `ClosedTerm` (defined later) by converting each AST
---   -- node to the associated `PEGNode` constructor and then recursing on the
---   -- children.
---   exprToTerm :: Fix expr -> ClosedTerm expr
---
---   -- Parse a `ClosedTerm` (defined later) back into an `Expr`.
---   -- This function should essentially just recurse over the tree, converting the
---   -- `PEGNode` into its associated `Expr` constructor and ensuring that the
---   -- number of children is appropriate to the constructor.
---   --
---   -- Laws:
---   --   * For any `e ∈ Expr`, `termToExpr (exprToTerm e) ≡ Right e`.
---   termToExpr :: ClosedTerm expr -> Either SomeException (Fix expr)
+newtype Variable
+  = MkVariable { variableID :: Int }
+  deriving (Eq, Ord)
 
 --------------------------------------------------------------------------------
 
@@ -141,33 +135,39 @@ nodeLabel = undefined
 -- arbitrary number of children. This type is polymorphic over the type of
 -- variables to exploit a trick that allows us to use the same type for terms
 -- with and without metasyntactic variables.
-data Term var
+data Term node var
   = MkVarTerm var
-  | MkNodeTerm PEGNode (Vector (Term var))
+  | MkNodeTerm node (Vector (Term node var))
   deriving (Eq, Ord)
 
 -- An open term may have variables.
 --
 -- When I say "variable", I don't mean variables in the actual AST;
 -- these are more like metasyntactic variables that may stand for any term.
-type OpenTerm = Term Variable
+type OpenTerm node = Term node Variable
 
 -- A closed term is one without any variables.
-type ClosedTerm = Term Void
+type ClosedTerm node = Term node Void
 
 -- Helper function to get the `Set` of free variables in the given `Term`.
-freeVars :: (Ord var) => Term var -> Set var
+freeVars :: (Ord var) => Term node var -> Set var
 freeVars (MkVarTerm var)         = Set.singleton var
-freeVars (MkNodeTerm _ children) = Set.unions (Vector.toList
-                                               (Vector.map freeVars children))
+freeVars (MkNodeTerm _ children) = Vector.map freeVars children
+                                   |> Vector.toList |> Set.unions
+
+--------------------------------------------------------------------------------
+
+class Expression node expr | expr -> node where
+  exprToTerm :: expr -> ClosedTerm node
+  termToExpr :: ClosedTerm node -> Either SomeException expr
 
 --------------------------------------------------------------------------------
 
 -- The `UnsafeMkEquation` constructor should never be used; instead all code
 -- should be written in terms of the `makeEquation` and `fromEquation`
 -- functions below.
-data Equation
-  = UnsafeMkEquation (OpenTerm, OpenTerm, Set Variable)
+data Equation node
+  = UnsafeMkEquation (OpenTerm node, OpenTerm node, Set Variable)
   deriving (Eq, Ord)
 
 -- Smart constructor for `Equation`s.
@@ -179,7 +179,7 @@ data Equation
 --   * For any `(lhs, rhs) ∈ (OpenTerm, OpenTerm)`,
 --     if `Set.isSubsetOf (freeVars rhs) (freeVars lhs) ≡ False`,
 --     then `makeEquation (lhs, rhs) ≡ Nothing`.
-makeEquation :: (OpenTerm, OpenTerm) -> Maybe Equation
+makeEquation :: (OpenTerm node, OpenTerm node) -> Maybe (Equation node)
 makeEquation (rhs, lhs) = if freeRHS `Set.isSubsetOf` freeLHS
                           then Just (UnsafeMkEquation (lhs, rhs, freeLHS))
                           else Nothing
@@ -187,15 +187,15 @@ makeEquation (rhs, lhs) = if freeRHS `Set.isSubsetOf` freeLHS
     (freeLHS, freeRHS) = (freeVars lhs, freeVars rhs)
 
 -- Get a pair containing the left- and right-hand sides of the given equation.
-fromEquation :: Equation -> (OpenTerm, OpenTerm)
+fromEquation :: Equation node -> (OpenTerm node, OpenTerm node)
 fromEquation (UnsafeMkEquation (lhs, rhs, _)) = (lhs, rhs)
 
 -- Get the set of variables bound in this equation by the left-hand side.
-equationBoundVariables :: Equation -> Set Variable
+equationBoundVariables :: Equation node -> Set Variable
 equationBoundVariables (UnsafeMkEquation (_, _, bounds)) = bounds
 
 -- Helper functions for getting the left- and right-hand sides of an equation.
-equationLHS, equationRHS :: Equation -> OpenTerm
+equationLHS, equationRHS :: Equation node -> OpenTerm node
 equationLHS = fst . fromEquation
 equationRHS = snd . fromEquation
 
@@ -210,7 +210,8 @@ equationRHS = snd . fromEquation
 --
 -- If we were using the `sbv` library, for example, it would be reasonable
 -- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
-type PerformanceHeuristic = PEG -> Double
+type PerformanceHeuristic node
+  = EPEG node -> Symbolic SInteger
 
 --------------------------------------------------------------------------------
 
@@ -219,7 +220,7 @@ type PerformanceHeuristic = PEG -> Double
 --
 -- The reason a `PEG` contains a `GraphNode` rather than a `Graph` is that it
 -- is a rooted graph.
-data PEG = UnsafeMkPEG (GraphNode PEGNode Int)
+data PEG node = UnsafeMkPEG (GraphNode node Int)
 
 -- Smart constructor for PEGs.
 --
@@ -229,48 +230,49 @@ data PEG = UnsafeMkPEG (GraphNode PEGNode Int)
 --   * if you sort the children of a node by their edge labels in increasing
 --     order, then you will recover the order of the children of that node in
 --     the original subterm.
-makePEG :: ClosedTerm -> PEG
+makePEG :: ClosedTerm node -> PEG node
 makePEG = undefined
 
 -- Get the root node of the `Graph` underlying the given `PEG`.
-pegRoot :: PEG -> GraphNode PEGNode Int
+pegRoot :: PEG node -> GraphNode node Int
 pegRoot (UnsafeMkPEG root) = root
 
 -- Given a `PEG`, return a `Vector` of `PEG`s, each representing the subgraph
 -- rooted at each child of the root node of the given `PEG`.
-pegChildren :: PEG -> Vector PEG
-pegChildren node = let outgoing :: [(Int, GraphNode PEGNode Int)]
+pegChildren :: forall node. PEG node -> Vector (PEG node)
+pegChildren node = let outgoing :: [(Int, GraphNode node Int)]
                        outgoing = Set.toList (outgoingEdges (pegRoot node))
-                       children :: Vector (GraphNode PEGNode Int)
+                       children :: Vector (GraphNode node Int)
                        children = Vector.fromList
                                   (map snd (sortBy (comparing fst) outgoing))
                    in Vector.map UnsafeMkPEG children
 
 -- Convert a `PEG` into a term by starting at the root node and recursively
 -- expanding nodes. If there is a cycle in the PEG, this will not terminate.
-pegToTerm :: PEG -> ClosedTerm
+pegToTerm :: PEG node -> ClosedTerm node
 pegToTerm peg = MkNodeTerm (nodeLabel (pegRoot peg))
                 (Vector.map pegToTerm (pegChildren peg))
 
 -- Modify a PEG, returning `Nothing` if the modification you made to the
 -- underlying `Graph` made the PEG no longer valid (e.g.: you added two edges
 -- out of the same node with the edge labels).
-modifyPEG :: (Graph PEGNode Int -> Graph PEGNode Int) -> PEG -> Maybe PEG
+modifyPEG :: (Graph node Int -> Graph node Int)
+          -> PEG node -> Maybe (PEG node)
 modifyPEG = undefined
 
 --------------------------------------------------------------------------------
 
 -- An EPEG (or equality-PEG) is a PEG along with an equivalence relation on the
-data EPEG
+data EPEG node
   = MkEPEG
-    { epegPEG        :: PEG
-    , epegEquivalent :: GraphNode PEGNode Int -> GraphNode PEGNode Int -> Bool
+    { epegPEG        :: PEG node
+    , epegEquivalent :: GraphNode node Int -> GraphNode node Int -> Bool
     -- ^ FIXME: replace with union-find or something
     }
 
 -- Given a pair of
-epegAddEquivalence :: (GraphNode PEGNode Int, GraphNode PEGNode Int)
-                   -> EPEG -> Maybe EPEG
+epegAddEquivalence :: (GraphNode node Int, GraphNode node Int)
+                   -> EPEG node -> Maybe (EPEG node)
 epegAddEquivalence (a, b) epeg
   = if epegEquivalent epeg a b
     then Nothing
@@ -280,10 +282,10 @@ epegAddEquivalence (a, b) epeg
 
 -- Convert a PEG into the trivial EPEG that holds every node to be semantically
 -- distinct.
-pegToEPEG :: PEG -> EPEG
+pegToEPEG :: PEG node -> EPEG node
 pegToEPEG peg = MkEPEG peg (\_ _ -> False)
 
-matchPattern :: (Ord var) => Term var -> EPEG -> Map var EPEG
+matchPattern :: (Ord var) => Term node var -> EPEG node -> Map var (EPEG node)
 matchPattern (MkVarTerm var) epeg = Map.singleton var epeg
 matchPattern (MkNodeTerm node children) epeg = undefined
 
@@ -292,38 +294,40 @@ matchPattern (MkNodeTerm node children) epeg = undefined
 -- no place in the EPEG where any of the equations apply (and where the result
 -- of applying the equation is something that is not already in the graph), then
 -- this function will return `Nothing`.
-saturateStep :: Set Equation -> EPEG -> Maybe EPEG
+saturateStep :: Set (Equation node) -> EPEG node -> Maybe (EPEG node)
 saturateStep = undefined
 
 -- Given a performance heuristic and an EPEG, return the PEG subgraph that
 -- maximizes the heuristic.
-selectBest :: PerformanceHeuristic -> EPEG -> PEG
+selectBest :: PerformanceHeuristic node -> EPEG node -> PEG node
 selectBest = undefined
 
 -- The internal version of equality saturation.
 saturate
-  :: Set Equation
-  -> PerformanceHeuristic
-  -> EPEG
-  -> (EPEG -> IO Bool)
-  -> (PEG -> IO (Maybe a))
+  :: Set (Equation node)
+  -> PerformanceHeuristic node
+  -> EPEG node
+  -> (EPEG node -> IO Bool)
+  -> (PEG node -> IO (Maybe a))
   -> IO [a]
 saturate = undefined
 
 -- The public interface of equality saturation.
 equalitySaturation
-  :: Set Equation
+  :: forall node expr a.
+     (Expression node expr)
+  => Set (Equation node)
   -- ^ A set of optimization axioms.
-  -> PerformanceHeuristic
+  -> PerformanceHeuristic node
   -- ^ The performance heuristic to optimize.
-  -> Expr
+  -> expr
   -- ^ The code whose performance will be optimized.
-  -> (EPEG -> IO Bool)
+  -> (EPEG node -> IO Bool)
   -- ^ A callback that, given the current state of the `EPEG`, will decide
   --   whether we should run `selectBest` again. In many cases, this will be
   --   some kind of timer.
-  -> (Expr -> IO (Maybe a))
-  -- ^ A callback that will be called with the optimized `Expr` every time
+  -> (expr -> IO (Maybe a))
+  -- ^ A callback that will be called with the optimized `Term` every time
   --   `selectBest` has found a new best version of the original program.
   --   The argument is the new best version, and the return value will be
   --   collected in a list during the equality saturation loop. If `Nothing`
@@ -333,15 +337,13 @@ equalitySaturation
   -> IO [a]
   -- ^ The list of results produced by the second callback, in _reverse_
   --   chronological order (e.g.: starting with newest and ending with oldest).
-equalitySaturation equations heuristic initial timer callback
-  = saturate
-    equations heuristic (exprToEPEG initial) timer (pegToExpr >=> callback)
-  where
-    exprToEPEG :: Expr -> EPEG
-    exprToEPEG = pegToEPEG . makePEG . exprToTerm
-    pegToExpr :: PEG -> IO Expr
-    pegToExpr peg = case termToExpr (pegToTerm peg) of
-                      Left  exception -> throwIO exception
-                      Right result    -> pure result
+equalitySaturation eqs heuristic initial timer cb
+  = let exprToEPEG :: expr -> EPEG node
+        exprToEPEG = exprToTerm .> makePEG .> pegToEPEG
+        pegToExpr :: PEG node -> IO expr
+        pegToExpr peg = case termToExpr (pegToTerm peg) of
+                          Left  exception -> throwIO exception
+                          Right result    -> pure result
+    in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)
 
 --------------------------------------------------------------------------------
