@@ -89,6 +89,8 @@ data Packing
     Sparse
   deriving (Eq, Show, Read)
 
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 type family Matrix (p :: Packing) = mat | mat -> p where
   Matrix 'Dense  = Eigen.Matrix
@@ -99,11 +101,15 @@ type family MutableMatrix (p :: Packing) = mat | mat -> p where
   MutableMatrix 'Dense  = Eigen.MMatrix
   MutableMatrix 'Sparse = MSparseMatrix
 
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 type MatrixPos   = (Int, Int)
 
 -- | FIXME: doc
 type MatrixShape = (Int, Int)
+
+--------------------------------------------------------------------------------
 
 -- | FIXME: doc
 class IsMatrix (p :: Packing) where
@@ -155,6 +161,8 @@ instance IsMatrix 'Sparse where
     m <- unsafeIOToST (Eigen.SparseMatrix.unsafeThaw matrix)
     pure (MSparseMatrix m)
 
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 class IsMutableMatrix (p :: Packing) where
   -- | Create a new 'MutableMatrix' with the given shape.
@@ -163,6 +171,20 @@ class IsMutableMatrix (p :: Packing) where
     => MatrixShape
     -- ^ The shape of the 'MutableMatrix' to create.
     -> m (MutableMatrix p a b (PrimState m))
+    -- ^ FIXME: doc
+
+  -- | Preallocate space for nonzero elements in the given 'MutableMatrix'.
+  --
+  --   This does nothing for dense matrices, but for sparse matrices it checks
+  --   that the matrix is in compressed mode, compresses it if it is not, and
+  --   then preallocates the given number of elements.
+  reserveMutableMatrix
+    :: (PrimMonad m, Eigen.Elem a b)
+    => Int
+    -- ^ The number of nonzero elements you want to preallocate.
+    -> MutableMatrix p a b (PrimState m)
+    -- ^ The mutable matrix in which the space will be reserved.
+    -> m ()
     -- ^ FIXME: doc
 
   -- | Returns a boolean representing whether the given 'MutableMatrix' is
@@ -250,6 +272,7 @@ class IsMutableMatrix (p :: Packing) where
 -- | FIXME: doc
 instance IsMutableMatrix 'Dense where
   newMutableMatrix          = uncurry Eigen.MMatrix.new
+  reserveMutableMatrix _ _  = pure ()
   validMutableMatrix        = Eigen.MMatrix.valid
   getMutableMatrix          = Eigen.MMatrix.read  .> uncurry
   setMutableMatrix          = Eigen.MMatrix.write .> uncurry
@@ -264,6 +287,10 @@ instance IsMutableMatrix 'Sparse where
     -- FIXME: verify that this is safe
     m <- unsafeIOToST (Eigen.IOSparseMatrix.new x y)
     pure (MSparseMatrix m)
+  reserveMutableMatrix space matrix = stToPrim $ do
+    let (MSparseMatrix m) = matrix
+    -- FIXME: verify that this is safe
+    unsafeIOToST (Eigen.IOSparseMatrix.reserve m space)
   validMutableMatrix = const True
   getMutableMatrix matrix (x, y) = stToPrim $ do
     -- FIXME: verify that this is safe
@@ -282,11 +309,72 @@ instance IsMutableMatrix 'Sparse where
     -- FIXME: verify that this is safe
     unsafeIOToST (Eigen.SparseMatrix.unsafeFreeze m)
 
+--------------------------------------------------------------------------------
 
+-- | FIXME: doc
+isCompressedMatrix
+  :: (Eigen.Elem a b)
+  => Matrix 'Sparse a b
+  -- ^ FIXME: doc
+  -> Bool
+  -- ^ FIXME: doc
+isCompressedMatrix = Eigen.SparseMatrix.compressed
+
+-- | FIXME: doc
+compressMatrix
+  :: (Eigen.Elem a b)
+  => Matrix 'Sparse a b
+  -- ^ FIXME: doc
+  -> Matrix 'Sparse a b
+  -- ^ FIXME: doc
+compressMatrix = Eigen.SparseMatrix.compress
+
+-- | FIXME: doc
+uncompressMatrix
+  :: (Eigen.Elem a b)
+  => Matrix 'Sparse a b
+  -- ^ FIXME: doc
+  -> Matrix 'Sparse a b
+  -- ^ FIXME: doc
+uncompressMatrix = Eigen.SparseMatrix.uncompress
+
+-- | FIXME: doc
+isCompressedMutableMatrix
+  :: (PrimMonad m, Eigen.Elem a b)
+  => MutableMatrix 'Sparse a b (PrimState m)
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
+isCompressedMutableMatrix matrix = stToPrim $ do
+  let (MSparseMatrix m) = matrix
+  unsafeIOToST (Eigen.IOSparseMatrix.compressed m)
+
+-- | FIXME: doc
+compressMutableMatrix
+  :: (PrimMonad m, Eigen.Elem a b)
+  => MutableMatrix 'Sparse a b (PrimState m)
+  -- ^ FIXME: doc
+  -> m ()
+  -- ^ FIXME: doc
+compressMutableMatrix matrix = stToPrim $ do
+  let (MSparseMatrix m) = matrix
+  unsafeIOToST (Eigen.IOSparseMatrix.compress m)
+
+-- | FIXME: doc
+uncompressMutableMatrix
+  :: (PrimMonad m, Eigen.Elem a b)
+  => MutableMatrix 'Sparse a b (PrimState m)
+  -- ^ FIXME: doc
+  -> m ()
+  -- ^ FIXME: doc
+uncompressMutableMatrix matrix = stToPrim $ do
+  let (MSparseMatrix m) = matrix
+  unsafeIOToST (Eigen.IOSparseMatrix.uncompress m)
+
+--------------------------------------------------------------------------------
 
 -- Eigen.MMatrix.replicate
 -- Eigen.IOSparseMatrix.setZero
 -- Eigen.IOSparseMatrix.setIdentity
-
 
 --------------------------------------------------------------------------------
