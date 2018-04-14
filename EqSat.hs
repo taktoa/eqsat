@@ -6,6 +6,7 @@
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
@@ -23,48 +24,54 @@ import           Control.Exception
 import           Control.Monad
 
 import           Control.Monad.Primitive
-import           Control.Monad.ST           (ST, runST)
+import           Control.Monad.ST          (ST, runST)
 
-import           Control.Monad.Trans.Class  (MonadTrans (lift))
-import qualified Control.Monad.Trans.Class  as MonadTrans
-import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT))
-import qualified Control.Monad.Trans.Maybe  as MaybeT
+import           Control.Monad.Trans.Class (MonadTrans (lift))
+import qualified Control.Monad.Trans.Class as MonadTrans
+import           Control.Monad.Trans.Maybe (MaybeT (MaybeT))
+import qualified Control.Monad.Trans.Maybe as MaybeT
 
-import           Data.Hashable              (Hashable)
+import           Data.Hashable             (Hashable)
 
-import           Data.HashMap.Mutable.Basic (MHashMap)
-import qualified Data.HashMap.Mutable.Basic as MHashMap
+import           Data.HashMap.Strict       (HashMap)
+import qualified Data.HashMap.Strict       as HashMap
 
-import qualified Data.Graph.Immutable       as Graph
-import qualified Data.Graph.Mutable         as MGraph
-import           Data.Graph.Types           (Graph, MGraph, Vertex)
-import qualified Data.Graph.Types           as Graph
-import qualified Data.Graph.Types           as MGraph
-import qualified Data.Graph.Types.Internal  as Graph.Internal
+import qualified Data.Graph.Immutable      as Graph
+import qualified Data.Graph.Mutable        as MGraph
+import           Data.Graph.Types          (Graph, MGraph, Vertex)
+import qualified Data.Graph.Types          as Graph
+import qualified Data.Graph.Types          as MGraph
+import qualified Data.Graph.Types.Internal as Graph.Internal
+
+import           Data.STRef                (STRef)
+import qualified Data.STRef                as STRef
 
 import           Data.Maybe
-import           Data.Ord                   (comparing)
+import           Data.Ord                  (comparing)
 
-import           Data.Foldable              (asum)
-import           Data.List                  (sortBy)
+import           Data.Foldable             (asum)
+import           Data.List                 (sortBy)
 
-import           Data.Map.Strict            (Map)
-import qualified Data.Map.Strict            as Map
+import           Data.Map.Strict           (Map)
+import qualified Data.Map.Strict           as Map
 
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
 
-import           Data.Vector                (Vector)
-import qualified Data.Vector                as Vector
+import           Data.Vector               (Vector)
+import qualified Data.Vector               as Vector
 
-import           Data.Void                  (Void)
+import           Data.Void                 (Void)
 
-import           Data.SBV                   (SInteger, Symbolic)
-import qualified Data.SBV                   as SBV
+import           Data.SBV                  (SInteger, Symbolic)
+import qualified Data.SBV                  as SBV
 
-import           Flow                       ((.>), (|>))
+import           Flow                      ((.>), (|>))
 
-import           GHC.Generics               (Generic)
+import           GHC.Generics              (Generic)
+
+import           MHashMap                  (MHashMap)
+import qualified MHashMap
 
 --------------------------------------------------------------------------------
 
@@ -228,6 +235,18 @@ modifyPEG :: (Graph g Int node -> Graph g Int node)
           -> PEG g node -> Maybe (PEG g node)
 modifyPEG = undefined
 
+normalizePEG
+  :: PEG g node
+  -> (Vertex g -> Vertex g, PEG g node)
+normalizePEG input = runST $ do
+  updaterHM <- MHashMap.new
+  pegRef <- STRef.newSTRef input
+  undefined
+  updater <- undefined
+  output  <- STRef.readSTRef pegRef
+  pure (updater, output)
+
+
 --------------------------------------------------------------------------------
 
 -- An EPEG (or equality-PEG) is a PEG along with an equivalence relation on the
@@ -267,7 +286,7 @@ matchPattern
      (Eq node, Ord var, Hashable var)
   => Term node var
   -> EPEG g node
-  -> Maybe (Map var (EPEG g node))
+  -> Maybe (HashMap var (EPEG g node))
 matchPattern = do
   let go :: forall s.
             MHashMap s var (EPEG g node)
@@ -277,21 +296,14 @@ matchPattern = do
       go hm term epeg
         = case term of
             (MkVarTerm var) -> do
-              -- -- This completely disallows non-linear pattern matches
-              -- current <- MHashMap.lookup hm var
-              -- when (isJust current) $ do
-              --   error "non-linear pattern matches are not allowed!"
-
               -- This is the equivalence relation under which non-linear pattern
               -- matches are checked. Currently it checks that the two nodes are
               -- exactly equal, so this means that matching will sometimes fail
               -- if the graph does not have maximal sharing.
               let equiv :: EPEG g node -> EPEG g node -> Bool
                   equiv a b = pegRoot (epegPEG a) == pegRoot (epegPEG b)
-              current <- MHashMap.lookup hm var
-              case current of
-                Just epeg' -> guard (epeg `equiv` epeg')
-                Nothing    -> MHashMap.insert hm var epeg
+              MHashMap.insertWith hm var epeg
+                $ \a b -> guard (a `equiv` b) >> pure a
             (MkNodeTerm node children) -> do
               let pairs = Vector.zip children (epegChildren epeg)
               guard (node == epegRootNode epeg)
@@ -300,10 +312,7 @@ matchPattern = do
   \term epeg -> runST $ MaybeT.runMaybeT $ do
     hm <- MHashMap.new
     go hm term epeg
-    let foldHM initial combine = MHashMap.foldM combine initial hm
-    foldHM Map.empty $ \m k v -> do
-      pure (Map.insertWith (\_ _ -> error "this should never happen") k v m)
-
+    MHashMap.freeze hm
 
 -- Given a set of equations and an EPEG, this will return a new EPEG that is the
 -- result of matching and applying one of the equations to the EPEG. If there is
