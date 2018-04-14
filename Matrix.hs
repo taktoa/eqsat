@@ -19,6 +19,8 @@ module Matrix
 import           UnexceptionalIO                 (UIO)
 import qualified UnexceptionalIO                 as UIO
 
+import           Control.Arrow                   ((&&&))
+
 import           Control.Exception               (SomeException)
 
 import           Control.Monad.Primitive
@@ -171,7 +173,8 @@ class IsMutableMatrix (p :: Packing) where
     => MatrixShape
     -- ^ The shape of the 'MutableMatrix' to create.
     -> m (MutableMatrix p a b (PrimState m))
-    -- ^ FIXME: doc
+    -- ^ A 'MutableMatrix' with the given shape, containing all zeros.
+    --   FIXME: is that true? double check
 
   -- | Preallocate space for nonzero elements in the given 'MutableMatrix'.
   --
@@ -185,7 +188,7 @@ class IsMutableMatrix (p :: Packing) where
     -> MutableMatrix p a b (PrimState m)
     -- ^ The mutable matrix in which the space will be reserved.
     -> m ()
-    -- ^ FIXME: doc
+    -- ^ A 'PrimMonad' action that reserves the space.
 
   -- | Returns a boolean representing whether the given 'MutableMatrix' is
   --   valid; for sparse matrices this is always true but for dense matrices
@@ -195,7 +198,7 @@ class IsMutableMatrix (p :: Packing) where
     => MutableMatrix p a b s
     -- ^ The 'MutableMatrix' to check the validity of.
     -> Bool
-    -- ^ FIXME: doc
+    -- ^ 'True' if the given matrix is valid, 'False' otherwise.
 
   -- | Get the element of the given matrix at the given position.
   --
@@ -207,7 +210,8 @@ class IsMutableMatrix (p :: Packing) where
     -> MatrixPos
     -- ^ The position of the element to get.
     -> m a
-    -- ^ FIXME: doc
+    -- ^ A 'PrimMonad' action returning the value of the element at the
+    --   given position in the given matrix.
 
   -- | Like 'getMutableMatrix', but potentially with better performance, and
   --   bounds-checking is not guaranteed.
@@ -218,7 +222,8 @@ class IsMutableMatrix (p :: Packing) where
     -> MatrixPos
     -- ^ The position of the element to get.
     -> m a
-    -- ^ FIXME: doc
+    -- ^ A 'PrimMonad' action returning the value of the element at the
+    --   given position in the given matrix.
 
   -- | Set the element of the given matrix at the given position to the given
   --   value.
@@ -233,7 +238,8 @@ class IsMutableMatrix (p :: Packing) where
     -> a
     -- ^ The new value that that position will be set to.
     -> m ()
-    -- ^ FIXME: doc
+    -- ^ A 'PrimMonad' action setting the element at the given position in the
+    --   given matrix to the given value.
 
   -- | Like 'setMutableMatrix', but potentially with better performance, and
   --   bounds-checking is not guaranteed.
@@ -246,7 +252,8 @@ class IsMutableMatrix (p :: Packing) where
     -> a
     -- ^ The new value that that position will be set to.
     -> m ()
-    -- ^ FIXME: doc
+    -- ^ A 'PrimMonad' action setting the element at the given position in the
+    --   given matrix to the given value.
 
   -- | Convert a 'MutableMatrix' to a 'Matrix' with the same packing.
   freezeMutableMatrix
@@ -254,7 +261,7 @@ class IsMutableMatrix (p :: Packing) where
     => MutableMatrix p a b (PrimState m)
     -- ^ The 'MutableMatrix' to freeze.
     -> m (Matrix p a b)
-    -- ^ FIXME: doc
+    -- ^ An immutable 'Matrix'.
 
   -- | Like 'freezeMutableMatrix', except the 'MutableMatrix' given to this
   --   function can no longer be used, and the performance may be better.
@@ -267,7 +274,15 @@ class IsMutableMatrix (p :: Packing) where
     => MutableMatrix p a b (PrimState m)
     -- ^ The 'MutableMatrix' to freeze.
     -> m (Matrix p a b)
-    -- ^ FIXME: doc
+    -- ^ An immutable 'Matrix'.
+
+  -- | Returns the shape of the given 'MutableMatrix'.
+  shapeMutableMatrix
+    :: (PrimMonad m, Eigen.Elem a b)
+    => MutableMatrix p a b (PrimState m)
+    -- ^ A 'MutableMatrix' to find the shape of.
+    -> m MatrixShape
+    -- ^ A 'PrimMonad' action returning the shape of the given matrix.
 
 -- | FIXME: doc
 instance IsMutableMatrix 'Dense where
@@ -280,6 +295,8 @@ instance IsMutableMatrix 'Dense where
   unsafeSetMutableMatrix    = Eigen.MMatrix.unsafeWrite .> uncurry
   freezeMutableMatrix       = Eigen.Matrix.freeze
   unsafeFreezeMutableMatrix = Eigen.Matrix.unsafeFreeze
+  shapeMutableMatrix        = (Eigen.MMatrix.mm_rows &&& Eigen.MMatrix.mm_cols)
+                              .> pure
 
 -- | FIXME: doc
 instance IsMutableMatrix 'Sparse where
@@ -308,6 +325,14 @@ instance IsMutableMatrix 'Sparse where
     let (MSparseMatrix m) = matrix
     -- FIXME: verify that this is safe
     unsafeIOToST (Eigen.SparseMatrix.unsafeFreeze m)
+  shapeMutableMatrix matrix = stToPrim $ do
+    let (MSparseMatrix m) = matrix
+    -- FIXME: verify that this is safe
+    r <- unsafeIOToST (Eigen.IOSparseMatrix.rows m)
+    -- FIXME: verify that this is safe
+    c <- unsafeIOToST (Eigen.IOSparseMatrix.cols m)
+    pure (r, c)
+
 
 --------------------------------------------------------------------------------
 
@@ -337,6 +362,8 @@ uncompressMatrix
   -> Matrix 'Sparse a b
   -- ^ FIXME: doc
 uncompressMatrix = Eigen.SparseMatrix.uncompress
+
+--------------------------------------------------------------------------------
 
 -- | FIXME: doc
 isCompressedMutableMatrix
