@@ -42,15 +42,28 @@ import qualified Data.IntMap                      as IntMap
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as Map
 
-import           Numeric.LinearAlgebra            (I, Matrix)
-import qualified Numeric.LinearAlgebra            as Matrix
+import           Data.Eigen.Matrix                (Matrix)
+import           Data.Eigen.Matrix.Mutable        (MMatrix)
+import           Data.Eigen.SparseMatrix          (SparseMatrix)
+import           Data.Eigen.SparseMatrix.Mutable  (IOSparseMatrix)
+
+import qualified Data.Eigen.LA                    as Eigen.LA
+import qualified Data.Eigen.Matrix                as Eigen.Matrix
+import qualified Data.Eigen.Matrix.Mutable        as Eigen.MMatrix
+import qualified Data.Eigen.Parallel              as Eigen.Parallel
+import qualified Data.Eigen.SparseLA              as Eigen.SparseLA
+import qualified Data.Eigen.SparseMatrix          as Eigen.SparseMatrix
+import qualified Data.Eigen.SparseMatrix.Mutable  as Eigen.IOSparseMatrix
 
 import           Data.Vector                      (Vector)
 import qualified Data.Vector                      as Vector
 import qualified Data.Vector.Generic.Mutable      as MVector.Generic
 import           Data.Vector.Mutable              (MVector)
 import qualified Data.Vector.Mutable              as MVector
+import qualified Data.Vector.Storable             as SVector
+import qualified Data.Vector.Storable.Mutable     as SMVector
 import           Data.Vector.Unboxed              (Unbox)
+import qualified Data.Vector.Unboxed              as UVector
 import qualified Data.Vector.Unboxed.Mutable      as UMVector
 
 import qualified Data.Vector.Algorithms.Insertion as MVector.InsertionSort
@@ -65,9 +78,14 @@ import           Flow                             ((.>), (|>))
 import           MutableBitmap                    (MutableBitmap)
 import qualified MutableBitmap
 
---------------------------------------------------------------------------------
+import           Matrix
+                 (Matrix, MutableMatrix, Packing (Dense, Sparse))
+import qualified Matrix
 
-type UMVector s a = UMVector.MVector s a
+import           Control.Monad.Amb                (AmbT)
+import qualified Control.Monad.Amb                as AmbT
+
+--------------------------------------------------------------------------------
 
 guardM :: (MonadPlus m) => m Bool -> m ()
 guardM action = action >>= guard
@@ -80,41 +98,21 @@ isConsecutive graph = runST $ do
     $ \v -> MutableBitmap.set bitmap v True
   MutableBitmap.isAllTrue bitmap
 
-makeMatrix_ :: (Storable a, PrimMonad m)
-            => (Int, Int)
-            -> (MVector (PrimState m) a -> m any)
-            -> m (Matrix a)
-makeMatrix_ (rows, cols) cb = do
-  entries <- MVector.new (rows * cols)
-  cb entries
-  Vector.freeze entries
-    |> fmap (Vector.toList .> (rows Matrix.>< cols))
+-- graphToSparseMatrix
+--   ::
 
-makeMatrix :: (Storable a, PrimMonad m)
-           => (Int, Int)
-           -> (((Int, Int) -> a -> m ()) -> m any)
-           -> m (Matrix a)
-makeMatrix (rows, cols) cb = do
-  makeMatrix_ (rows, cols) $ \entries -> do
-    cb (\(r, c) -> MVector.write entries (r * cols + c))
-
-unsafeGraphToAdjacencyMatrix_
-  :: forall m g. (PrimMonad m) => Graph g () Int -> m (Matrix I)
-unsafeGraphToAdjacencyMatrix_ graph = do
-  let numNodes = Graph.sizeInt (Graph.size graph)
-  makeMatrix (numNodes, numNodes) $ \set -> do
-    flip Graph.traverseEdges_ graph $ \s t sLabel tLabel () -> do
-      undefined
-
-graphToAdjacencyMatrix_
-  :: forall m g. (PrimMonad m) => Graph g () Int -> m (Maybe (Matrix I))
-graphToAdjacencyMatrix_ graph = MaybeT.runMaybeT $ do
-  guard (isConsecutive graph)
-  lift $ unsafeGraphToAdjacencyMatrix_ graph
-
-mgraphToAdjacencyMatrix_ :: (PrimMonad m)
-                         => MGraph (PrimState m) g () Int
-                         -> m (Maybe (Matrix I))
-mgraphToAdjacencyMatrix_ = Graph.freeze >=> graphToAdjacencyMatrix_
+-- graphToAdjacencyMatrix_
+--   :: (PrimMonad m) => Graph g () Int -> m (Maybe (Matrix I))
+-- graphToAdjacencyMatrix_ graph = MaybeT.runMaybeT $ do
+--   guard (isConsecutive graph)
+--   let numNodes = Graph.sizeInt (Graph.size graph)
+--   lift $ makeMatrix (numNodes, numNodes) $ \set -> do
+--     flip Graph.traverseEdges_ graph $ \s t sLabel tLabel () -> do
+--       undefined
+--
+-- mgraphToAdjacencyMatrix_ :: (PrimMonad m)
+--                          => MGraph (PrimState m) g () Int
+--                          -> m (Maybe (Matrix I))
+-- mgraphToAdjacencyMatrix_ = Graph.freeze >=> graphToAdjacencyMatrix_
 
 --------------------------------------------------------------------------------
