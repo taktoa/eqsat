@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -22,7 +23,7 @@ import           Control.Monad.ST                 (ST, runST)
 
 import           Control.Monad.Trans.Class        (MonadTrans (lift))
 import qualified Control.Monad.Trans.Class        as MonadTrans
-import           Control.Monad.Trans.Maybe        (MaybeT)
+import           Control.Monad.Trans.Maybe        (MaybeT (MaybeT))
 import qualified Control.Monad.Trans.Maybe        as MaybeT
 
 import           Data.Proxy                       (Proxy (Proxy))
@@ -42,19 +43,6 @@ import qualified Data.IntMap                      as IntMap
 import           Data.Map.Strict                  (Map)
 import qualified Data.Map.Strict                  as Map
 
-import           Data.Eigen.Matrix                (Matrix)
-import           Data.Eigen.Matrix.Mutable        (MMatrix)
-import           Data.Eigen.SparseMatrix          (SparseMatrix)
-import           Data.Eigen.SparseMatrix.Mutable  (IOSparseMatrix)
-
-import qualified Data.Eigen.LA                    as Eigen.LA
-import qualified Data.Eigen.Matrix                as Eigen.Matrix
-import qualified Data.Eigen.Matrix.Mutable        as Eigen.MMatrix
-import qualified Data.Eigen.Parallel              as Eigen.Parallel
-import qualified Data.Eigen.SparseLA              as Eigen.SparseLA
-import qualified Data.Eigen.SparseMatrix          as Eigen.SparseMatrix
-import qualified Data.Eigen.SparseMatrix.Mutable  as Eigen.IOSparseMatrix
-
 import           Data.Vector                      (Vector)
 import qualified Data.Vector                      as Vector
 import qualified Data.Vector.Generic.Mutable      as MVector.Generic
@@ -72,6 +60,8 @@ import qualified Data.Vector.Algorithms.Radix     as MVector.RadixSort
 
 import           Data.ByteString                  (ByteString)
 import qualified Data.ByteString                  as BS
+
+import           Foreign.C.Types                  (CFloat)
 
 import           Flow                             ((.>), (|>))
 
@@ -97,6 +87,28 @@ isConsecutive graph = runST $ do
   Vector.forM_ (Graph.verticesToVector (Graph.vertices graph))
     $ \v -> MutableBitmap.set bitmap v True
   MutableBitmap.isAllTrue bitmap
+
+graphToAdjacencyMatrix
+  :: Graph g e Int -> Matrix 'Dense Float CFloat
+graphToAdjacencyMatrix
+  = undefined
+
+bipartiteMatching :: Graph g e Int -> Maybe (Graph g e Int)
+bipartiteMatching graph = runST $ MaybeT.runMaybeT $ do
+  let graphSize = Graph.sizeInt (Graph.size graph)
+  let amatrix = graphToAdjacencyMatrix graph
+  bmatrix <- MaybeT (pure (Matrix.invertSquareMatrix @Float @CFloat amatrix))
+             >>= (Matrix.thawMatrix .> lift)
+  mmatrix <- Matrix.newMutableMatrix @'Dense (Matrix.shapeMatrix amatrix)
+
+  forM_ [0 .. graphSize - 1] $ \c -> do
+    forM_ [0 .. graphSize - 1] $ \r -> do
+      let x = (Matrix.coeffMatrix (c, r) amatrix) :: Float
+      y <- id @Float <$> Matrix.getMutableMatrix (r, c) bmatrix
+      when ((x /= (0.0 :: Float)) && (y /= (0.0 :: Float))) $ do
+
+        undefined
+  undefined
 
 -- graphToSparseMatrix
 --   ::
