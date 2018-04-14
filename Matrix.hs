@@ -12,9 +12,12 @@
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 module Matrix
   ( module Matrix
   ) where
+
+--------------------------------------------------------------------------------
 
 import           UnexceptionalIO                 (UIO)
 import qualified UnexceptionalIO                 as UIO
@@ -22,6 +25,8 @@ import qualified UnexceptionalIO                 as UIO
 import           Control.Arrow                   ((&&&))
 
 import           Control.Exception               (SomeException)
+
+import           Control.Monad
 
 import           Control.Monad.Primitive
 
@@ -145,11 +150,20 @@ class IsMatrix (p :: Packing) where
     -> m (MutableMatrix p a b (PrimState m))
     -- ^ FIXME: doc
 
+  -- | FIXME: doc
+  shapeMatrix
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ FIXME: doc
+    -> MatrixShape
+    -- ^ FIXME: doc
+
 -- | FIXME: doc
 instance IsMatrix 'Dense where
   zeroMatrix       = uncurry Eigen.Matrix.zero
   thawMatrix       = Eigen.Matrix.thaw
   unsafeThawMatrix = Eigen.Matrix.unsafeThaw
+  shapeMatrix      = Eigen.Matrix.dims
 
 -- | FIXME: doc
 instance IsMatrix 'Sparse where
@@ -162,6 +176,7 @@ instance IsMatrix 'Sparse where
     -- FIXME: verify that this is safe
     m <- unsafeIOToST (Eigen.SparseMatrix.unsafeThaw matrix)
     pure (MSparseMatrix m)
+  shapeMatrix = Eigen.SparseMatrix.rows &&& Eigen.SparseMatrix.cols
 
 --------------------------------------------------------------------------------
 
@@ -333,68 +348,148 @@ instance IsMutableMatrix 'Sparse where
     c <- unsafeIOToST (Eigen.IOSparseMatrix.cols m)
     pure (r, c)
 
-
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-isCompressedMatrix
+class ConvertMatrix (p1 :: Packing) (p2 :: Packing) where
+  -- | Convert a 'Matrix' from one 'Packing' to another.
+  --
+  --   This function can be fruitfully used with @-XTypeApplications@ to
+  --   concisely specify the source and target representations; for example:
+  --
+  --   @
+  --     {-# LANGUAGE TypeApplications #-}
+  --
+  --     toSparse :: ('Eigen.Elem' a b)
+  --              => 'Matrix' p a b -> 'Matrix' 'Sparse' a b
+  --     toSparse = 'convertMatrix' @_ @'Sparse'
+  --
+  --     fromSparse :: ('Eigen.Elem' a b)
+  --                => 'Matrix' 'Sparse' a b -> 'Matrix' p a b
+  --     fromSparse = 'convertMatrix' @'Sparse' @_
+  --   @
+  convertMatrix
+    :: (Eigen.Elem a b)
+    => Matrix p1 a b
+    -- ^ A matrix to convert the representation of.
+    -> Matrix p2 a b
+    -- ^ A new matrix with the new representation.
+
+  -- | Convert a 'MutableMatrix' from one 'Packing' to another.
+  --
+  --   Like 'convertMatrix', this can be fruitfully used with
+  --   @-XTypeApplications@ to concisely convert between representations.
+  --
+  --   Note that this function can be inefficient, as in the nontrivial case
+  --   where @p1 ≠ p2@, it will freeze the mutable matrix (a copy), convert
+  --   the frozen matrix (another copy), and then unsafely thaw the result
+  --   (this is safe because we know that we just created this copy, so no
+  --   other references to it can exist).
+  convertMutableMatrix
+    :: (PrimMonad m, Eigen.Elem a b)
+    => MutableMatrix p1 a b (PrimState m)
+    -- ^ A mutable matrix to convert the representation of.
+    -> m (MutableMatrix p2 a b (PrimState m))
+    -- ^ A new mutable matrix with the new representation.
+
+-- | Trivial; @'convertMatrix' = 'id'@ and @'convertMutableMatrix' = 'pure'@.
+instance ConvertMatrix 'Dense 'Dense where
+  convertMatrix = id
+  convertMutableMatrix = pure
+
+-- | Trivial; @'convertMatrix' = 'id'@ and @'convertMutableMatrix' = 'pure'@.
+instance ConvertMatrix 'Sparse 'Sparse where
+  convertMatrix = id
+  convertMutableMatrix = pure
+
+-- | Nontrivial; 'convertMatrix' uses 'Eigen.SparseMatrix.fromMatrix'
+--   and 'convertMutableMatrix' delegates to 'convertMatrix' by freezing,
+--   converting, and then thawing.
+instance ConvertMatrix 'Dense 'Sparse where
+  convertMatrix = Eigen.SparseMatrix.fromMatrix
+  convertMutableMatrix = freezeMutableMatrix
+                         >=> (convertMatrix .> pure)
+                         >=> unsafeThawMatrix
+
+-- | Nontrivial; 'convertMatrix' uses 'Eigen.SparseMatrix.toMatrix'
+--   and 'convertMutableMatrix' delegates to 'convertMatrix' by freezing,
+--   converting, and then thawing.
+instance ConvertMatrix 'Sparse 'Dense where
+  convertMatrix = Eigen.SparseMatrix.toMatrix
+  convertMutableMatrix = freezeMutableMatrix
+                         >=> (convertMatrix .> pure)
+                         >=> unsafeThawMatrix
+
+--------------------------------------------------------------------------------
+
+-- | Checks whether the given immutable sparse matrix is in compressed mode.
+isCompressedSparseMatrix
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
-  -- ^ FIXME: doc
+  -- ^ An immutable sparse matrix.
   -> Bool
-  -- ^ FIXME: doc
-isCompressedMatrix = Eigen.SparseMatrix.compressed
+  -- ^ 'True' if the matrix was in compressed mode, 'False' otherwise.
+isCompressedSparseMatrix = Eigen.SparseMatrix.compressed
 
--- | FIXME: doc
-compressMatrix
+-- | Convert the given immutable sparse matrix to compressed mode.
+compressSparseMatrix
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
-  -- ^ FIXME: doc
+  -- ^ An immutable sparse matrix that may not be in compressed mode.
+  --
+  --   FIXME: is it true that matrices in compressed mode are tolerated?
   -> Matrix 'Sparse a b
-  -- ^ FIXME: doc
-compressMatrix = Eigen.SparseMatrix.compress
+  -- ^ An immutable sparse matrix in compressed mode with the same data.
+compressSparseMatrix = Eigen.SparseMatrix.compress
 
--- | FIXME: doc
-uncompressMatrix
+-- | Convert the given immutable sparse matrix to uncompressed mode.
+uncompressSparseMatrix
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
-  -- ^ FIXME: doc
+  -- ^ An immutable sparse matrix that may be in compressed mode.
+  --
+  --   FIXME: is it true that matrices not in compressed mode are tolerated?
   -> Matrix 'Sparse a b
-  -- ^ FIXME: doc
-uncompressMatrix = Eigen.SparseMatrix.uncompress
+  -- ^ An immutable sparse matrix in uncompressed mode with the same data.
+uncompressSparseMatrix = Eigen.SparseMatrix.uncompress
 
 --------------------------------------------------------------------------------
 
--- | FIXME: doc
-isCompressedMutableMatrix
+-- | Checks whether the given mutable sparse matrix is in compressed mode.
+isCompressedSparseMutableMatrix
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
-  -- ^ FIXME: doc
+  -- ^ A mutable sparse matrix.
   -> m Bool
-  -- ^ FIXME: doc
-isCompressedMutableMatrix matrix = stToPrim $ do
+  -- ^ A 'PrimMonad' action returning 'True' if the given matrix was in
+  --   compressed mode and 'False' otherwise.
+isCompressedSparseMutableMatrix matrix = stToPrim $ do
   let (MSparseMatrix m) = matrix
   unsafeIOToST (Eigen.IOSparseMatrix.compressed m)
 
--- | FIXME: doc
-compressMutableMatrix
+-- | Convert the given mutable sparse matrix to compressed mode.
+compressSparseMutableMatrix
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
-  -- ^ FIXME: doc
+  -- ^ A mutable sparse matrix that may be in compressed mode.
+  --
+  --   FIXME: is it true that matrices in compressed mode are tolerated?
   -> m ()
-  -- ^ FIXME: doc
-compressMutableMatrix matrix = stToPrim $ do
+  -- ^ A 'PrimMonad' action that converts the matrix to compressed mode.
+compressSparseMutableMatrix matrix = stToPrim $ do
   let (MSparseMatrix m) = matrix
   unsafeIOToST (Eigen.IOSparseMatrix.compress m)
 
--- | FIXME: doc
-uncompressMutableMatrix
+-- | Convert the given mutable sparse matrix to uncompressed mode.
+uncompressSparseMutableMatrix
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
-  -- ^ FIXME: doc
+  -- ^ A mutable sparse matrix that may be in compressed mode.
+  --
+  --   FIXME: is it true that matrices not in compressed mode are tolerated?
   -> m ()
-  -- ^ FIXME: doc
-uncompressMutableMatrix matrix = stToPrim $ do
+  -- ^ A 'PrimMonad' action that converts the matrix to uncompressed mode.
+uncompressSparseMutableMatrix matrix = stToPrim $ do
   let (MSparseMatrix m) = matrix
   unsafeIOToST (Eigen.IOSparseMatrix.uncompress m)
 
