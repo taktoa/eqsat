@@ -6,6 +6,7 @@
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE Trustworthy            #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
@@ -88,12 +89,28 @@ newtype MSparseMatrix a b s
 
 --------------------------------------------------------------------------------
 
--- | FIXME: doc
+-- | This datatype is meant to be used with the @-XDataKinds@ language extension
+--   to tag whether a matrix is meant to be _dense_ or _sparse_.
+--
+--   A _dense_ matrix is an in-memory representation of an @m × n@ matrix valued
+--   in a semiring @R@ that uses @Θ(m · n · log₂(|R|))@ bits of storage.
+--
+--   A _sparse_ matrix is an in-memory representation of an @m × n@ matrix @M@
+--   valued in a semiring @R@ that uses @Θ(nnz(M) · log₂(|R|))@ bits of storage,
+--   where @nnz(M)@ is the number of nonzero elements of @M@.
 data Packing
-  = -- | FIXME: doc
+  = -- | A type-level tag for dense matrices.
     Dense
-  | -- | FIXME: doc
+  | -- | A type-level tag for sparse matrices.
     Sparse
+  deriving (Eq, Show, Read)
+
+-- | FIXME: doc
+data Mutability
+  = -- | FIXME: doc
+    Immutable
+  | -- | FIXME: doc
+    Mutable
   deriving (Eq, Show, Read)
 
 --------------------------------------------------------------------------------
@@ -111,10 +128,10 @@ type family MutableMatrix (p :: Packing) = mat | mat -> p where
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-type MatrixPos   = (Int, Int)
+type MatrixPos = (Int, Int) -- FIXME: use newtype instead?
 
 -- | FIXME: doc
-type MatrixShape = (Int, Int)
+type MatrixShape = (Int, Int) -- FIXME: use newtype instead?
 
 --------------------------------------------------------------------------------
 
@@ -150,13 +167,43 @@ class IsMatrix (p :: Packing) where
     -> m (MutableMatrix p a b (PrimState m))
     -- ^ FIXME: doc
 
-  -- | FIXME: doc
+  -- | Get the shape of the given matrix.
   shapeMatrix
     :: (Eigen.Elem a b)
     => Matrix p a b
-    -- ^ FIXME: doc
+    -- ^ A matrix to get the shape of.
     -> MatrixShape
-    -- ^ FIXME: doc
+    -- ^ The shape of that matrix.
+
+  -- | Add two matrices together.
+  addMatrix
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ The left hand side of the addition.
+    -> Matrix p a b
+    -- ^ The right hand side of the addition.
+    -> Matrix p a b
+    -- ^ The sum of the two given matrices.
+
+  -- | Subtract one matrix from another.
+  subMatrix
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ The left hand side of the subtraction.
+    -> Matrix p a b
+    -- ^ The right hand side of the subtraction.
+    -> Matrix p a b
+    -- ^ The difference between the two given matrices.
+
+  -- | Compute the product of two matrices.
+  mulMatrix
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ The left hand side of the product.
+    -> Matrix p a b
+    -- ^ The right hand side of the product.
+    -> Matrix p a b
+    -- ^ The product of the two given matrices.
 
 -- | FIXME: doc
 instance IsMatrix 'Dense where
@@ -164,6 +211,9 @@ instance IsMatrix 'Dense where
   thawMatrix       = Eigen.Matrix.thaw
   unsafeThawMatrix = Eigen.Matrix.unsafeThaw
   shapeMatrix      = Eigen.Matrix.dims
+  addMatrix        = (+)
+  subMatrix        = (-)
+  mulMatrix        = (*)
 
 -- | FIXME: doc
 instance IsMatrix 'Sparse where
@@ -177,6 +227,9 @@ instance IsMatrix 'Sparse where
     m <- unsafeIOToST (Eigen.SparseMatrix.unsafeThaw matrix)
     pure (MSparseMatrix m)
   shapeMatrix = Eigen.SparseMatrix.rows &&& Eigen.SparseMatrix.cols
+  addMatrix = (+)
+  subMatrix = (-)
+  mulMatrix = (*)
 
 --------------------------------------------------------------------------------
 
@@ -496,7 +549,12 @@ uncompressSparseMutableMatrix matrix = stToPrim $ do
 --------------------------------------------------------------------------------
 
 -- Eigen.MMatrix.replicate
+-- Eigen.IOSparseMatrix.innerSize
+-- Eigen.IOSparseMatrix.outerSize
+-- Eigen.IOSparseMatrix.nonZeros
 -- Eigen.IOSparseMatrix.setZero
 -- Eigen.IOSparseMatrix.setIdentity
+-- Eigen.IOSparseMatrix.resize
+-- Eigen.IOSparseMatrix.conservativeResize
 
 --------------------------------------------------------------------------------
