@@ -1,6 +1,7 @@
 --------------------------------------------------------------------------------
 
 {-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -16,44 +17,62 @@ module EqualitySaturation where
 
 --------------------------------------------------------------------------------
 
-import           Control.Exception         (SomeException, throwIO)
+import           Control.Exception
+                 (Exception, SomeException, catch, throw, throwIO)
 
 import           Control.Monad
 
 import           Control.Monad.Primitive
+import           Control.Monad.ST           (ST, runST)
 
-import qualified Data.Graph.Immutable      as Graph
-import qualified Data.Graph.Mutable        as MGraph
-import           Data.Graph.Types          (Graph, MGraph, Vertex)
-import qualified Data.Graph.Types          as Graph
-import qualified Data.Graph.Types          as MGraph
-import qualified Data.Graph.Types.Internal as Graph.Internal
+import           Control.Monad.Trans.Class  (MonadTrans (lift))
+import qualified Control.Monad.Trans.Class  as MonadTrans
+import           Control.Monad.Trans.Maybe  (MaybeT (MaybeT))
+import qualified Control.Monad.Trans.Maybe  as MaybeT
 
-import           Data.Ord                  (comparing)
+import           Data.Hashable              (Hashable)
 
-import           Data.List                 (sortBy)
+import           Data.HashMap.Mutable.Basic (MHashMap)
+import qualified Data.HashMap.Mutable.Basic as MHashMap
 
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
+import qualified Data.Graph.Immutable       as Graph
+import qualified Data.Graph.Mutable         as MGraph
+import           Data.Graph.Types           (Graph, MGraph, Vertex)
+import qualified Data.Graph.Types           as Graph
+import qualified Data.Graph.Types           as MGraph
+import qualified Data.Graph.Types.Internal  as Graph.Internal
 
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
+import           Data.Maybe
+import           Data.Ord                   (comparing)
 
-import           Data.Vector               (Vector)
-import qualified Data.Vector               as Vector
+import           Data.Foldable              (asum)
+import           Data.List                  (sortBy)
 
-import           Data.Void                 (Void)
+import           Data.Map.Strict            (Map)
+import qualified Data.Map.Strict            as Map
 
-import           Data.SBV                  (SInteger, Symbolic)
-import qualified Data.SBV                  as SBV
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 
-import           Flow                      ((.>), (|>))
+import           Data.Vector                (Vector)
+import qualified Data.Vector                as Vector
+
+import           Data.Void                  (Void)
+
+import           Data.SBV                   (SInteger, Symbolic)
+import qualified Data.SBV                   as SBV
+
+import           Flow                       ((.>), (|>))
+
+import           GHC.Generics               (Generic)
 
 --------------------------------------------------------------------------------
 
 newtype Variable
   = MkVariable { variableID :: Int }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Generic)
+
+instance Hashable Variable
 
 --------------------------------------------------------------------------------
 
@@ -148,8 +167,8 @@ equationRHS = snd . fromEquation
 --
 -- If we were using the `sbv` library, for example, it would be reasonable
 -- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
-type PerformanceHeuristic g node
-  = EPEG g node -> Symbolic SInteger
+type PerformanceHeuristic node
+  = forall g. EPEG g node -> Symbolic SInteger
 
 --------------------------------------------------------------------------------
 
@@ -181,6 +200,9 @@ pegRoot (UnsafeMkPEG _ root) = root
 
 pegGraph :: PEG g node -> Graph g Int node
 pegGraph (UnsafeMkPEG graph _) = graph
+
+pegRootNode :: PEG g node -> node
+pegRootNode peg = Graph.atVertex (pegRoot peg) (pegGraph peg)
 
 -- Given a `PEG`, return a `Vector` of `PEG`s, each representing the subgraph
 -- rooted at each child of the root node of the given `PEG`.
@@ -234,12 +256,54 @@ epegAddEquivalence (a, b) epeg
 pegToEPEG :: PEG g node -> EPEG g node
 pegToEPEG peg = MkEPEG peg undefined -- FIXME
 
-matchPattern :: (Ord var)
-             => Term node var
-             -> EPEG g node
-             -> Map var (EPEG g node)
-matchPattern (MkVarTerm var) epeg = Map.singleton var epeg
-matchPattern (MkNodeTerm node children) epeg = undefined
+epegChildren :: EPEG g node -> Vector (EPEG g node)
+epegChildren (MkEPEG peg eq) = (\p -> MkEPEG p eq) <$> pegChildren peg
+
+epegRootNode :: EPEG g node -> node
+epegRootNode (MkEPEG peg _) = pegRootNode peg
+
+matchPattern
+  :: forall node var g.
+     (Eq node, Ord var, Hashable var)
+  => Term node var
+  -> EPEG g node
+  -> Maybe (Map var (EPEG g node))
+matchPattern = do
+  let go :: forall s.
+            MHashMap s var (EPEG g node)
+         -> Term node var
+         -> EPEG g node
+         -> MaybeT (ST s) ()
+      go hm term epeg
+        = case term of
+            (MkVarTerm var) -> do
+              -- -- This completely disallows non-linear pattern matches
+              -- current <- MHashMap.lookup hm var
+              -- when (isJust current) $ do
+              --   error "non-linear pattern matches are not allowed!"
+
+              -- This is the equivalence relation under which non-linear pattern
+              -- matches are checked. Currently it checks that the two nodes are
+              -- exactly equal, so this means that matching will sometimes fail
+              -- if the graph does not have maximal sharing.
+              let equiv :: EPEG g node -> EPEG g node -> Bool
+                  equiv a b = pegRoot (epegPEG a) == pegRoot (epegPEG b)
+              current <- MHashMap.lookup hm var
+              case current of
+                Just epeg' -> guard (epeg `equiv` epeg')
+                Nothing    -> MHashMap.insert hm var epeg
+            (MkNodeTerm node children) -> do
+              let pairs = Vector.zip children (epegChildren epeg)
+              guard (node == epegRootNode epeg)
+              Vector.forM_ pairs $ \(subpat, subgraph) -> do
+                go hm subpat subgraph
+  \term epeg -> runST $ MaybeT.runMaybeT $ do
+    hm <- MHashMap.new
+    go hm term epeg
+    let foldHM initial combine = MHashMap.foldM combine initial hm
+    foldHM Map.empty $ \m k v -> do
+      pure (Map.insertWith (\_ _ -> error "this should never happen") k v m)
+
 
 -- Given a set of equations and an EPEG, this will return a new EPEG that is the
 -- result of matching and applying one of the equations to the EPEG. If there is
@@ -247,30 +311,32 @@ matchPattern (MkNodeTerm node children) epeg = undefined
 -- of applying the equation is something that is not already in the graph), then
 -- this function will return `Nothing`.
 saturateStep :: Set (Equation node) -> EPEG g node -> Maybe (EPEG g node)
-saturateStep = undefined
+saturateStep eqs epeg = do
+  undefined
 
 -- Given a performance heuristic and an EPEG, return the PEG subgraph that
 -- maximizes the heuristic.
-selectBest :: PerformanceHeuristic g node -> EPEG g node -> PEG g node
-selectBest = undefined
+selectBest :: PerformanceHeuristic node -> EPEG g node -> PEG g node
+selectBest heuristic epeg = undefined
 
--- The internal version of equality saturation.
+-- | The internal version of equality saturation.
 saturate
   :: Set (Equation node)
-  -> PerformanceHeuristic g node
+  -> PerformanceHeuristic node
   -> EPEG g node
   -> (EPEG g node -> IO Bool)
   -> (PEG g node -> IO (Maybe a))
   -> IO [a]
-saturate = undefined
+saturate eqs heuristic initial timer cb = do
+  undefined
 
--- The public interface of equality saturation.
+-- | The public interface of equality saturation.
 equalitySaturation
   :: forall node expr a.
      (Expression node expr)
   => Set (Equation node)
   -- ^ A set of optimization axioms.
-  -> (forall g. PerformanceHeuristic g node)
+  -> PerformanceHeuristic node
   -- ^ The performance heuristic to optimize.
   -> expr
   -- ^ The code whose performance will be optimized.
