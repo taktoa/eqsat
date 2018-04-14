@@ -15,22 +15,26 @@ module EqualitySaturation where
 
 --------------------------------------------------------------------------------
 
-import           Control.Exception (SomeException, throwIO)
-import           Control.Monad     ((>=>))
-import           Data.List         (sortBy)
-import           Data.Map.Strict   (Map)
-import qualified Data.Map.Strict   as Map
-import           Data.Ord          (comparing)
-import           Data.Set          (Set)
-import qualified Data.Set          as Set
-import           Data.Vector       (Vector)
-import qualified Data.Vector       as Vector
-import           Data.Void         (Void)
+import           Control.Exception       (SomeException, throwIO)
 
-import           Data.SBV          (SInteger, Symbolic)
-import qualified Data.SBV          as SBV
+import           Control.Monad           ((>=>))
 
-import           Flow              ((.>), (|>))
+import           Control.Monad.Primitive
+
+import           Data.List               (sortBy)
+import           Data.Map.Strict         (Map)
+import qualified Data.Map.Strict         as Map
+import           Data.Ord                (comparing)
+import           Data.Set                (Set)
+import qualified Data.Set                as Set
+import           Data.Vector             (Vector)
+import qualified Data.Vector             as Vector
+import           Data.Void               (Void)
+
+import           Data.SBV                (SInteger, Symbolic)
+import qualified Data.SBV                as SBV
+
+import           Flow                    ((.>), (|>))
 
 --------------------------------------------------------------------------------
 
@@ -47,51 +51,53 @@ newtype Variable
 
 --------------------------------------------------------------------------------
 
--- I didn't feel like bringing in a real graph library, so I'm postulating one
--- with the interface defined below. A real implementation of equality
--- saturation would not be need to be polymorphic over the graph it uses, since
--- that's just an implementation detail, so I'm not using `FIXME` or `fixme`
--- in this code.
-
--- A type of directed graphs with vertex labels of type `v` and edge labels of
--- type `e`. Two nodes of the same label can exist, but there can only ever be
--- at most one edge with a given `(source, edge-label, target)`.
+-- | A type of directed graphs with vertex labels of type `v` and edge labels of
+--   type `e`. Two nodes of the same label can exist, but there can only ever be
+--   at most one edge with a given `(source, edge-label, target)`.
 --
--- A `Graph` can be empty (i.e.: it is not a rooted graph).
-data Graph v e
+--   A `Graph` can be empty (i.e.: it is not a rooted graph).
+data Graph s g v e
 
--- A type of pointers to graph nodes. The runtime data of a `GraphNode` should
--- also include a pointer to the whole graph, otherwise some of the functions
--- below will not be definable.
-data GraphNode v e
+-- | A type of pointers to graph nodes. The runtime data of a `GraphNode` should
+--   also include a pointer to the whole graph, otherwise some of the functions
+--   below will not be definable.
+data GraphNode s g v e
 
--- A `GraphNode` is just a pair of pointers, so we should be able to compare it
--- for equality even if the vertex and edge label types cannot be compared for
--- equality. Assume for the sake of expediency that we will never compare two
--- `GraphNode`s from different graphs for equality, though you could use unsafe
--- pointer equality to implement that correctly in Haskell.
-instance Eq (GraphNode v e)
-instance Ord (GraphNode v e)
+-- | A `GraphNode` is just a pair of pointers, so we should be able to compare
+--   it for equality even if the vertex and edge label types cannot be compared
+--   for equality.
+instance Eq (GraphNode s g v e)
+instance Ord (GraphNode s g v e)
 
--- The graph with no vertices or edges.
-emptyGraph :: Graph v e
+-- | Create a graph with no vertices or edges.
+emptyGraph
+  :: (PrimMonad m)
+  => m (Graph (PrimState m) g v e)
 emptyGraph = undefined
 
--- Return all the nodes in the given graph, in the order they were added.
-graphNodes :: Graph v e -> [GraphNode v e]
+-- | Return all the nodes in the given graph, in the order they were added.
+graphNodes
+  :: (PrimMonad m)
+  => Graph s g v e
+  -> Vector (GraphNode (PrimState m) g v e)
 graphNodes = undefined
 
--- Given a graph and a vertex label, add a fresh node to the graph with that
--- label and return a reference to it.
-addNode :: Graph v e -> v -> GraphNode v e
+-- | Given a graph and a vertex label, add a fresh node to the graph with that
+--   label and return a reference to it.
+addNode
+  :: (PrimMonad m)
+  => Graph s g v e
+  -> v
+  -> GraphNode g v e
 addNode = undefined
 
--- Given a reference to a graph node `x`, an edge label `l`, and a reference
--- to a node `y` in the same graph, add an edge from `x` to `y` with label `l`.
--- If such an edge already exists, return `Nothing`. Otherwise, return a pair
--- of references to `x` and `y` in the updated graph.
-addEdge :: GraphNode v e -> e -> GraphNode v e
-        -> Maybe (GraphNode v e, GraphNode v e)
+-- | Given a reference to a graph node @x@, an edge label @l@, and a reference
+--   to a node @y@ in the same graph, add an edge from @x@ to @y@ labelled @l@.
+--   If such an edge already exists, return 'Nothing'. Otherwise, return a pair
+--   of references to @x@ and @y@ in the updated graph.
+addEdge
+  :: GraphNode v e -> e -> GraphNode v e
+  -> Maybe (GraphNode v e, GraphNode v e)
 addEdge = undefined
 
 -- Given a reference to a node in a graph, returns a `Set` of pairs of node
