@@ -79,80 +79,21 @@ import qualified EqSat.MHashMap            as MHashMap
 import           EqSat.MHashSet            (MHashSet)
 import qualified EqSat.MHashSet            as MHashSet
 
---------------------------------------------------------------------------------
+import           EqSat.Variable            (Variable)
+import qualified EqSat.Variable            as Variable
 
-newtype Variable
-  = MkVariable { variableID :: Int }
-  deriving (Eq, Ord, Generic)
+import           EqSat.Term
+                 (ClosedTerm, OpenTerm, Term (MkNodeTerm, MkVarTerm))
+import qualified EqSat.Term                as Term
 
-instance Hashable Variable
-
---------------------------------------------------------------------------------
-
--- | A type of term trees. Each node in the tree contains a value and has an
---   arbitrary number of children. This type is polymorphic over the type of
---   variables to exploit a trick that allows us to use the same type for terms
---   with and without metasyntactic variables.
-data Term node var
-  = MkVarTerm var
-  | MkNodeTerm node (Vector (Term node var))
-  deriving (Eq, Ord)
-
--- | An open term may have (metasyntactic) variables.
-type OpenTerm node = Term node Variable
-
--- | A closed term is one without any variables.
-type ClosedTerm node = Term node Void
-
--- | Helper function to get the `Set` of free variables in the given `Term`.
-freeVars :: (Ord var) => Term node var -> Set var
-freeVars (MkVarTerm var)         = Set.singleton var
-freeVars (MkNodeTerm _ children) = Vector.map freeVars children
-                                   |> Vector.toList |> Set.unions
+import           EqSat.Equation            (Equation)
+import qualified EqSat.Equation            as Equation
 
 --------------------------------------------------------------------------------
 
 class Expression node expr | expr -> node where
   exprToTerm :: expr -> ClosedTerm node
   termToExpr :: ClosedTerm node -> Either SomeException expr
-
---------------------------------------------------------------------------------
-
--- The `UnsafeMkEquation` constructor should never be used; instead all code
--- should be written in terms of the `makeEquation` and `fromEquation`
--- functions below.
-data Equation node
-  = UnsafeMkEquation (OpenTerm node, OpenTerm node, Set Variable)
-  deriving (Eq, Ord)
-
--- Smart constructor for `Equation`s.
---
--- Laws:
---   * For any `(lhs, rhs) ∈ (OpenTerm, OpenTerm)`,
---     if `Set.isSubsetOf (freeVars rhs) (freeVars lhs) ≡ True`,
---     then `fromEquation <$> makeEquation (lhs, rhs) ≡ Just (lhs, rhs)`.
---   * For any `(lhs, rhs) ∈ (OpenTerm, OpenTerm)`,
---     if `Set.isSubsetOf (freeVars rhs) (freeVars lhs) ≡ False`,
---     then `makeEquation (lhs, rhs) ≡ Nothing`.
-makeEquation :: (OpenTerm node, OpenTerm node) -> Maybe (Equation node)
-makeEquation (rhs, lhs) = if freeRHS `Set.isSubsetOf` freeLHS
-                          then Just (UnsafeMkEquation (lhs, rhs, freeLHS))
-                          else Nothing
-  where
-    (freeLHS, freeRHS) = (freeVars lhs, freeVars rhs)
-
--- Get a pair containing the left- and right-hand sides of the given equation.
-fromEquation :: Equation node -> (OpenTerm node, OpenTerm node)
-fromEquation (UnsafeMkEquation (lhs, rhs, _)) = (lhs, rhs)
-
--- Get the set of variables bound in this equation by the left-hand side.
-equationBoundVariables :: Equation node -> Set Variable
-equationBoundVariables (UnsafeMkEquation (_, _, bounds)) = bounds
-
--- Helper functions for getting the left- and right-hand sides of an equation.
-equationLHS, equationRHS :: Equation node -> OpenTerm node
-equationLHS = fst . fromEquation
-equationRHS = snd . fromEquation
 
 --------------------------------------------------------------------------------
 
@@ -320,18 +261,24 @@ applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
 -- no place in the EPEG where any of the equations apply (and where the result
 -- of applying the equation is something that is not already in the graph), then
 -- this function will return `Nothing`.
-saturateStep :: Set (Equation node) -> EPEG g node -> Maybe (EPEG g node)
+saturateStep
+  :: Set (Equation node Variable)
+  -> EPEG g node
+  -> Maybe (EPEG g node)
 saturateStep eqs epeg = do
   undefined
 
 -- Given a performance heuristic and an EPEG, return the PEG subgraph that
 -- maximizes the heuristic.
-selectBest :: PerformanceHeuristic node -> EPEG g node -> PEG g node
+selectBest
+  :: PerformanceHeuristic node
+  -> EPEG g node
+  -> PEG g node
 selectBest heuristic epeg = undefined
 
 -- | The internal version of equality saturation.
 saturate
-  :: Set (Equation node)
+  :: Set (Equation node Variable)
   -> PerformanceHeuristic node
   -> EPEG g node
   -> (EPEG g node -> IO Bool)
@@ -344,7 +291,7 @@ saturate eqs heuristic initial timer cb = do
 equalitySaturation
   :: forall node expr a.
      (Expression node expr)
-  => Set (Equation node)
+  => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
   -> PerformanceHeuristic node
   -- ^ The performance heuristic to optimize.
