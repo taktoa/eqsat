@@ -5,8 +5,8 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module EqSat.MGraph
-  ( module EqSat.MGraph -- FIXME: explicit export list
+module EqSat.Internal.MGraph
+  ( module EqSat.Internal.MGraph -- FIXME: explicit export list
   ) where
 
 --------------------------------------------------------------------------------

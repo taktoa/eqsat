@@ -5,7 +5,7 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module EqSat.MHashMap
+module EqSat.Internal.MHashMap
   ( MHashMap
   , new
   , newSized

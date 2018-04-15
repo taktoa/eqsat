@@ -83,11 +83,11 @@ import           Flow                      ((.>), (|>))
 
 import           GHC.Generics              (Generic)
 
-import           EqSat.MHashMap            (MHashMap)
-import qualified EqSat.MHashMap            as MHashMap
+import           EqSat.Internal.MHashMap   (MHashMap)
+import qualified EqSat.Internal.MHashMap   as MHashMap
 
-import           EqSat.MHashSet            (MHashSet)
-import qualified EqSat.MHashSet            as MHashSet
+import           EqSat.Internal.MHashSet   (MHashSet)
+import qualified EqSat.Internal.MHashSet   as MHashSet
 
 import           EqSat.Variable            (Variable)
 import qualified EqSat.Variable            as Variable
@@ -324,9 +324,9 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
     value <- getValue i -- default?
     Vector.indexM cls (fromIntegral value)
 
-  let vertexSet = HashSet.fromList (Vector.toList vertices)
+  let vertexSet = HS.fromList (Vector.toList vertices)
 
-  let keepVertex = HashSet.member vertexSet
+  let keepVertex = HS.member vertexSet
 
   rootClass <- MaybeT (pure (epegGetClass epeg (pegRoot (epegPEG epeg))))
 

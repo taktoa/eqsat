@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module EqSat.MutableBitmap
+module EqSat.Internal.MutableBitmap
   ( MutableBitmap
   , new
   , size

@@ -367,21 +367,21 @@
     - {name: [Flow], as: [Flow]}
 
     # `eqsat` (COMPLETE)
-    - {name: [EqSat],               as: EqSat}
-    - {name: [EqSat.Variable],      as: [EqSat, Variable]}
-    - {name: [EqSat.Term],          as: [EqSat, Term]}
-    - {name: [EqSat.Equation],      as: [EqSat, Equation]}
-    - {name: [EqSat.IsExpression],  as: [EqSat, IsExpression]}
-    - {name: [EqSat.GraphMatching], as: [EqSat, GraphMatching]}
-    - {name: [EqSat.Matrix],        as: [EqSat, Matrix]}
-    - {name: [EqSat.MutableBitmap], as: [EqSat, MutableBitmap]}
-    - {name: [EqSat.MGraph],        as: [EqSat, MGraph]}
-    - {name: [EqSat.MHashMap],      as: [EqSat, MHashMap]}
-    - {name: [EqSat.MHashSet],      as: [EqSat, MHashSet]}
+    - {name: [EqSat],                        as: EqSat}
+    - {name: [EqSat.Variable],               as: [EqSat, Variable]}
+    - {name: [EqSat.Term],                   as: [EqSat, Term]}
+    - {name: [EqSat.Equation],               as: [EqSat, Equation]}
+    - {name: [EqSat.IsExpression],           as: [EqSat, IsExpression]}
+    - {name: [EqSat.Internal.GraphMatching], as: [GraphMatching]}
+    - {name: [EqSat.Internal.Matrix],        as: [Matrix]}
+    - {name: [EqSat.Internal.MutableBitmap], as: [MutableBitmap]}
+    - {name: [EqSat.Internal.MGraph],        as: [MGraph]}
+    - {name: [EqSat.Internal.MHashMap],      as: [MHashMap]}
+    - {name: [EqSat.Internal.MHashSet],      as: [MHashSet]}
 
 - functions:
     - {name: unsafePerformIO, within: []}
-    - {name: unsafeIOToPrim,  within: [EqSat.Matrix]}
+    - {name: unsafeIOToPrim,  within: [EqSat.Internal.Matrix]}
     - {name: unsafeIOToST,    within: []}
     - {name: unsafeFromIO,    within: []} # `unexceptionalio`
 

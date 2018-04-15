@@ -75,12 +75,12 @@ library
                         , EqSat.Equation
                         , EqSat.Variable
                         , EqSat.IsExpression
-                        , EqSat.MHashSet
-                        , EqSat.MHashMap
-                        , EqSat.MutableBitmap
-                        , EqSat.GraphMatching
-                        , EqSat.Matrix
-                        , EqSat.MGraph
+                        , EqSat.Internal.MHashSet
+                        , EqSat.Internal.MHashMap
+                        , EqSat.Internal.MutableBitmap
+                        , EqSat.Internal.GraphMatching
+                        , EqSat.Internal.Matrix
+                        , EqSat.Internal.MGraph
     default-language:     Haskell2010
     -- FIXME: add other-extensions list
     if impl(ghc >= 8.0)
