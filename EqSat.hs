@@ -1,12 +1,16 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE DeriveGeneric       #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DataKinds                 #-}
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE GADTSyntax                #-}
+{-# LANGUAGE KindSignatures            #-}
+{-# LANGUAGE LambdaCase                #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE TypeFamilies              #-}
 
 --------------------------------------------------------------------------------
 
@@ -29,6 +33,8 @@ import           Control.Monad.Trans.Class (MonadTrans (lift))
 import qualified Control.Monad.Trans.Class as MonadTrans
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT))
 import qualified Control.Monad.Trans.Maybe as MaybeT
+
+import           Control.Monad.Except      (MonadError (throwError))
 
 import           Data.Hashable             (Hashable)
 
@@ -60,9 +66,10 @@ import qualified Data.Set                  as Set
 import           Data.Vector               (Vector)
 import qualified Data.Vector               as Vector
 
-import           Data.Void                 (Void)
+import           Data.Void                 (Void, absurd)
 
-import           Data.SBV                  (SInteger, Symbolic)
+import           Data.SBV
+                 (SInteger, Symbolic, (.<), (.<=), (.==))
 import qualified Data.SBV                  as SBV
 
 import           Flow                      ((.>), (|>))
@@ -90,20 +97,6 @@ import           EqSat.IsExpression
 
 --------------------------------------------------------------------------------
 
--- The type of global performance heuristics.
---
--- In a real implementation of equality saturation, this type will not be
--- defined this way, as the efficiency of equality saturation can be improved
--- if the pseudoboolean integer solver can introspect on the way in which the
--- performance heuristic is defined, rather than treating it as an oracle.
---
--- If we were using the `sbv` library, for example, it would be reasonable
--- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
-type PerformanceHeuristic node
-  = forall g. EPEG g node -> Symbolic SInteger
-
---------------------------------------------------------------------------------
-
 -- The `UnsafeMkPEG` constructor should never be used; instead all code should
 -- be written in terms of the functions below.
 --
@@ -115,6 +108,21 @@ data PEG g node
     !(Vertex g)
   deriving ()
 
+-- | FIXME: doc
+data SomePEG node where
+  -- | FIXME: doc
+  MkSomePEG :: !(PEG g node) -> SomePEG node
+
+-- | FIXME: doc
+withSomePEG
+  :: SomePEG node
+  -- ^ FIXME: doc
+  -> (forall g. PEG g node -> result)
+  -- ^ FIXME: doc
+  -> result
+  -- ^ FIXME: doc
+withSomePEG (MkSomePEG peg) f = f peg
+
 -- Smart constructor for PEGs.
 --
 -- Postconditions:
@@ -123,8 +131,12 @@ data PEG g node
 --   * if you sort the children of a node by their edge labels in increasing
 --     order, then you will recover the order of the children of that node in
 --     the original subterm.
-makePEG :: ClosedTerm node -> PEG g node
+makePEG :: Term node (SomePEG node) -> PEG g node
 makePEG = undefined
+
+-- | FIXME: doc
+makePEG' :: ClosedTerm node -> PEG g node
+makePEG' = fmap absurd .> makePEG
 
 -- Get the root node of the `Graph` underlying the given `PEG`.
 pegRoot :: PEG g node -> Vertex g
@@ -174,25 +186,51 @@ normalizePEG input = runST $ do
 
 --------------------------------------------------------------------------------
 
--- An EPEG (or equality-PEG) is a PEG along with an equivalence relation on the
+-- | An EPEG (or equality-PEG) is a PEG along with an equivalence relation on
+--   the PEG nodes.
 data EPEG g node
   = MkEPEG
-    { epegPEG        :: PEG g node
-    , epegEqRelation :: Int -- FIXME
+    { epegPEG        :: !(PEG g node)
+    , epegEqRelation :: !Int -- FIXME
     -- ^ FIXME: replace with union-find or something
     }
+  deriving ()
 
-epegEquivalent :: EPEG g node -> Vertex g -> Vertex g -> Bool
+-- | FIXME: doc
+data SomeEPEG node where
+  -- | FIXME: doc
+  MkSomeEPEG :: !(EPEG g node) -> SomeEPEG node
+
+-- | FIXME: doc
+withSomeEPEG
+  :: SomeEPEG node
+  -- ^ FIXME: doc
+  -> (forall g. EPEG g node -> result)
+  -- ^ FIXME: doc
+  -> result
+  -- ^ FIXME: doc
+withSomeEPEG (MkSomeEPEG epeg) f = f epeg
+
+-- | Return a 'Bool' representing whether the two given vertices are in the same
+--   class of the equivalence relation contained in the given 'EPEG'.
+epegEquivalent
+  :: EPEG g node
+  -- ^ FIXME: doc
+  -> (Vertex g, Vertex g)
+  -- ^ FIXME: doc
+  -> Bool
+  -- ^ FIXME: doc
 epegEquivalent = undefined
 
--- Given a pair of
-epegAddEquivalence :: (Vertex g, Vertex g)
-                   -> EPEG g node -> Maybe (EPEG g node)
+-- | Given a pair of vertices in an 'EPEG', combine their equivalence classes.
+epegAddEquivalence
+  :: (Vertex g, Vertex g)
+  -> EPEG g node -> Maybe (EPEG g node)
 epegAddEquivalence (a, b) epeg
-  = if epegEquivalent epeg a b
+  = if epegEquivalent epeg (a, b)
     then Nothing
     else Just (MkEPEG { epegPEG        = epegPEG epeg
-                      , epegEqRelation = undefined
+                      , epegEqRelation = undefined (epegEqRelation epeg)
                       })
 
 -- Convert a PEG into the trivial EPEG that holds every node to be semantically
@@ -205,6 +243,38 @@ epegChildren (MkEPEG peg eq) = (\p -> MkEPEG p eq) <$> pegChildren peg
 
 epegRootNode :: EPEG g node -> node
 epegRootNode (MkEPEG peg _) = pegRootNode peg
+
+epegClasses :: EPEG g node -> Set (Set (Vertex g))
+epegClasses = undefined
+
+--------------------------------------------------------------------------------
+
+-- The type of global performance heuristics.
+--
+-- In a real implementation of equality saturation, this type will not be
+-- defined this way, as the efficiency of equality saturation can be improved
+-- if the pseudoboolean integer solver can introspect on the way in which the
+-- performance heuristic is defined, rather than treating it as an oracle.
+--
+-- If we were using the `sbv` library, for example, it would be reasonable
+-- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
+type PerformanceHeuristic node
+  = forall g. PEG g node -> Symbolic SInteger
+
+makePerformanceHeuristic
+  :: PerformanceHeuristic node
+makePerformanceHeuristic epeg = do
+  let classes = zip [0..] (Set.toList (epegClasses epeg))
+  variablePairs <- forM classes $ \(i, cls) -> do
+    let vec = Vector.fromList (Set.toList cls)
+    let n = Vector.length vec
+    var <- SBV.exists (show i)
+    SBV.constrain (0 .<= var)
+    SBV.constrain (var .< fromIntegral n)
+    pure (var, vec)
+  undefined
+
+--------------------------------------------------------------------------------
 
 matchPattern
   :: forall node var g.
@@ -249,6 +319,16 @@ applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
   -- peg <- epegPEG epeg
   undefined
 
+--------------------------------------------------------------------------------
+
+-- Given a performance heuristic and an EPEG, return the PEG subgraph that
+-- maximizes the heuristic.
+selectBest
+  :: PerformanceHeuristic node
+  -> EPEG g node
+  -> PEG g node
+selectBest heuristic epeg = undefined
+
 -- Given a set of equations and an EPEG, this will return a new EPEG that is the
 -- result of matching and applying one of the equations to the EPEG. If there is
 -- no place in the EPEG where any of the equations apply (and where the result
@@ -261,22 +341,15 @@ saturateStep
 saturateStep eqs epeg = do
   undefined
 
--- Given a performance heuristic and an EPEG, return the PEG subgraph that
--- maximizes the heuristic.
-selectBest
-  :: PerformanceHeuristic node
-  -> EPEG g node
-  -> PEG g node
-selectBest heuristic epeg = undefined
-
 -- | The internal version of equality saturation.
 saturate
-  :: Set (Equation node Variable)
+  :: (Monad m)
+  => Set (Equation node Variable)
   -> PerformanceHeuristic node
   -> EPEG g node
-  -> (EPEG g node -> IO Bool)
-  -> (PEG g node -> IO (Maybe a))
-  -> IO [a]
+  -> (EPEG g node -> m Bool)
+  -> (PEG g node -> m (Maybe a))
+  -> m [a]
 saturate eqs heuristic initial timer cb = do
   let go epeg soFar = do
         case saturateStep eqs epeg of
@@ -292,19 +365,19 @@ saturate eqs heuristic initial timer cb = do
 
 -- | The public interface of equality saturation.
 equalitySaturation
-  :: forall node expr a.
-     (IsExpression node expr)
+  :: forall node expr m a.
+     (IsExpression node expr, MonadError SomeException m)
   => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
   -> PerformanceHeuristic node
   -- ^ The performance heuristic to optimize.
   -> expr
   -- ^ The code whose performance will be optimized.
-  -> (forall g. EPEG g node -> IO Bool)
+  -> (forall g. EPEG g node -> m Bool)
   -- ^ A callback that, given the current state of the `EPEG`, will decide
   --   whether we should run `selectBest` again. In many cases, this will be
   --   some kind of timer.
-  -> (expr -> IO (Maybe a))
+  -> (expr -> m (Maybe a))
   -- ^ A callback that will be called with the optimized `Term` every time
   --   `selectBest` has found a new best version of the original program.
   --   The argument is the new best version, and the return value will be
@@ -312,15 +385,13 @@ equalitySaturation
   --   is ever returned by this callback, equality saturation will terminate
   --   early; otherwise it will run for an amount of time that is exponential
   --   in the size of the original program.
-  -> IO [a]
+  -> m [a]
   -- ^ The list of results produced by the second callback, in _reverse_
   --   chronological order (e.g.: starting with newest and ending with oldest).
 equalitySaturation eqs heuristic initial timer cb
-  = let exprToEPEG :: expr -> EPEG g node
-        exprToEPEG = exprToTerm .> makePEG .> pegToEPEG
-        pegToExpr :: PEG g node -> IO expr
+  = let exprToEPEG = exprToTerm .> makePEG' .> pegToEPEG
         pegToExpr peg = case termToExpr (pegToTerm peg) of
-                          Left  exception -> throwIO exception
+                          Left  exception -> throwError exception
                           Right result    -> pure result
     in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)
 
