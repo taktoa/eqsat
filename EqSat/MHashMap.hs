@@ -5,7 +5,7 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module MHashMap
+module EqSat.MHashMap
   ( MHashMap
   , new
   , newSized
@@ -23,10 +23,12 @@ module MHashMap
 
 --------------------------------------------------------------------------------
 
-import           Prelude                    (Double, Eq, Int, error, flip, ($))
+import           Prelude
+                 (Double, Eq, Int, Show, error, flip, ($))
 
-import           Control.Applicative        (Applicative (pure))
+import           Control.Applicative        (pure)
 import           Control.Monad              (Monad ((>>=)))
+import           Data.Functor               ((<$>))
 
 import           Control.Monad.Primitive    (PrimMonad (PrimState))
 
@@ -43,14 +45,16 @@ import           Flow                       ((.>))
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-type MHashMap s k v = MHM.MHashMap s k v
+newtype MHashMap s k v
+  = MkMHashMap (MHM.MHashMap s k v)
+  deriving (Show)
 
 -- | FIXME: doc
 new
   :: (PrimMonad m)
   => m (MHashMap (PrimState m) k v)
   -- ^ FIXME: doc
-new = MHM.new
+new = MkMHashMap <$> MHM.new
 
 -- | FIXME: doc
 newSized
@@ -59,7 +63,7 @@ newSized
   -- ^ FIXME: doc
   -> m (MHashMap (PrimState m) k v)
   -- ^ FIXME: doc
-newSized = MHM.newSized
+newSized size = MkMHashMap <$> MHM.newSized size
 
 -- | FIXME: doc
 delete
@@ -70,7 +74,7 @@ delete
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-delete = MHM.delete
+delete (MkMHashMap hm) = MHM.delete hm
 
 -- | FIXME: doc
 lookup
@@ -81,7 +85,7 @@ lookup
   -- ^ FIXME: doc
   -> m (Maybe v)
   -- ^ FIXME: doc
-lookup = MHM.lookup
+lookup (MkMHashMap hm) = MHM.lookup hm
 
 -- | FIXME: doc
 insert
@@ -94,7 +98,7 @@ insert
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-insert = MHM.insert
+insert (MkMHashMap hm) = MHM.insert hm
 
 -- | FIXME: doc
 insertWith
@@ -110,10 +114,10 @@ insertWith
   -> m ()
   -- ^ FIXME: doc
 insertWith hm k v combiner = do
-  value <- MHM.lookup hm k
+  value <- lookup hm k
            >>= (\case (Just v') -> combiner v v'
                       Nothing   -> pure v)
-  MHM.insert hm k value
+  insert hm k value
 
 -- | FIXME: doc
 mapM_
@@ -124,7 +128,7 @@ mapM_
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-mapM_ = MHM.mapM_
+mapM_ f (MkMHashMap hm) = MHM.mapM_ f hm
 
 -- | FIXME: doc
 forM_
@@ -148,7 +152,7 @@ foldM
   -- ^ FIXME: doc
   -> m a
   -- ^ FIXME: doc
-foldM hm initial combine
+foldM (MkMHashMap hm) initial combine
   = MHM.foldM (\x k v -> combine k v x) initial hm
 
 -- | FIXME: doc
@@ -158,7 +162,7 @@ computeOverhead
   -- ^ FIXME: doc
   -> m Double
   -- ^ FIXME: doc
-computeOverhead = MHM.computeOverhead
+computeOverhead (MkMHashMap hm) = MHM.computeOverhead hm
 
 -- | FIXME: doc
 freeze
@@ -183,8 +187,8 @@ thaw hm = do
   let fold :: (Monad m) => HM.HashMap k v -> a -> (k -> v -> a -> m a) -> m a
       fold hmap initial combine
         = HM.foldrWithKey (\k v x -> x >>= combine k v) (pure initial) hmap
-  result <- MHM.newSized (HM.size hm)
-  fold hm () $ \k v () -> MHM.insert result k v
+  result <- newSized (HM.size hm)
+  fold hm () $ \k v () -> insert result k v
   pure result
 
 --------------------------------------------------------------------------------

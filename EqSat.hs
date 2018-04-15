@@ -14,7 +14,10 @@
 
 --------------------------------------------------------------------------------
 
-module EqualitySaturation where
+-- | FIXME: doc
+module EqSat
+  ( module EqSat -- FIXME: specific export list
+  ) where
 
 --------------------------------------------------------------------------------
 
@@ -70,11 +73,11 @@ import           Flow                      ((.>), (|>))
 
 import           GHC.Generics              (Generic)
 
-import           MHashMap                  (MHashMap)
-import qualified MHashMap
+import           EqSat.MHashMap            (MHashMap)
+import qualified EqSat.MHashMap            as MHashMap
 
-import           MHashSet                  (MHashSet)
-import qualified MHashSet
+import           EqSat.MHashSet            (MHashSet)
+import qualified EqSat.MHashSet            as MHashSet
 
 --------------------------------------------------------------------------------
 
@@ -301,6 +304,16 @@ matchPattern = do
     hm <- MHashMap.new
     go hm term epeg
     MHashMap.freeze hm
+
+applyRule
+  :: forall node var g.
+     (Eq node, Ord var, Hashable var)
+  => (Term node var, Term node var)
+  -> EPEG g node
+  -> Maybe (EPEG g node)
+applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
+  -- peg <- epegPEG epeg
+  undefined
 
 -- Given a set of equations and an EPEG, this will return a new EPEG that is the
 -- result of matching and applying one of the equations to the EPEG. If there is

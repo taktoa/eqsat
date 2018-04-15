@@ -11,8 +11,9 @@
 
 --------------------------------------------------------------------------------
 
-module GraphMatching
-  ( module GraphMatching -- FIXME: explicit export list
+-- | FIXME: doc
+module EqSat.GraphMatching
+  ( module EqSat.GraphMatching -- FIXME: explicit export list
   ) where
 
 --------------------------------------------------------------------------------
@@ -65,12 +66,12 @@ import           Foreign.C.Types                  (CFloat)
 
 import           Flow                             ((.>), (|>))
 
-import           MutableBitmap                    (MutableBitmap)
-import qualified MutableBitmap
+import           EqSat.MutableBitmap              (MutableBitmap)
+import qualified EqSat.MutableBitmap              as MutableBitmap
 
-import           Matrix
+import           EqSat.Matrix
                  (Matrix, MutableMatrix, Packing (Dense, Sparse))
-import qualified Matrix
+import qualified EqSat.Matrix                     as Matrix
 
 import           Control.Monad.Amb                (AmbT)
 import qualified Control.Monad.Amb                as AmbT

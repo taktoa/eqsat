@@ -14,8 +14,8 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module Matrix
-  ( module Matrix
+module EqSat.Matrix
+  ( module EqSat.Matrix -- FIXME: specific export list
   ) where
 
 --------------------------------------------------------------------------------

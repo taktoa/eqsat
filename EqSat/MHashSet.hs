@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module MHashSet
+module EqSat.MHashSet
   ( MHashSet
   , new
   , newSized
@@ -35,8 +35,8 @@ import           Data.Hashable           (Hashable)
 import           Data.HashSet            (HashSet)
 import qualified Data.HashSet            as HashSet
 
-import           MHashMap                (MHashMap)
-import qualified MHashMap
+import           EqSat.MHashMap          (MHashMap)
+import qualified EqSat.MHashMap          as MHashMap
 
 import           Flow                    ((.>))
 

@@ -1,13 +1,20 @@
 --------------------------------------------------------------------------------
 
-module MutableBitmap
+-- | FIXME: doc
+module EqSat.MutableBitmap
   ( MutableBitmap
-  , new, size, get, set, fill, isAllTrue, isAllFalse
+  , new
+  , size
+  , get
+  , set
+  , fill
+  , isAllTrue
+  , isAllFalse
   ) where
 
 --------------------------------------------------------------------------------
 
-import           Control.Monad.Primitive (PrimMonad, PrimState, stToPrim)
+import           Control.Monad.Primitive (PrimMonad (PrimState), stToPrim)
 
 import qualified Foundation              as F
 import qualified Foundation.Array        as F.Array
@@ -15,6 +22,7 @@ import qualified Foundation.Collection   as F.Collection
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 data MutableBitmap s
   = UnsafeMkMutableBitmap
     {-# UNPACK #-} !Int
@@ -23,17 +31,36 @@ data MutableBitmap s
 
 --------------------------------------------------------------------------------
 
-new :: (PrimMonad m) => Int -> m (MutableBitmap (PrimState m))
+-- | FIXME: doc
+new
+  :: (PrimMonad m)
+  => Int
+  -- ^ FIXME: doc
+  -> m (MutableBitmap (PrimState m))
+  -- ^ FIXME: doc
 new n = stToPrim $ do
   bitmap <- F.Collection.mutNew (fromIntegral n)
   let result = UnsafeMkMutableBitmap n bitmap
   fill result False
   pure result
 
-size :: MutableBitmap s -> Int
+-- | FIXME: doc
+size
+  :: MutableBitmap s
+  -- ^ FIXME: doc
+  -> Int
+  -- ^ FIXME: doc
 size (UnsafeMkMutableBitmap n _) = n
 
-fill :: (PrimMonad m) => MutableBitmap (PrimState m) -> Bool -> m ()
+-- | FIXME: doc
+fill
+  :: (PrimMonad m)
+  => MutableBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> Bool
+  -- ^ FIXME: doc
+  -> m ()
+  -- ^ FIXME: doc
 fill bitmap b = stToPrim $ do
   let (UnsafeMkMutableBitmap n bm) = bitmap
   let go i = if i < 0
@@ -41,17 +68,41 @@ fill bitmap b = stToPrim $ do
              else F.Collection.mutUnsafeWrite bm (F.Offset i) b >> go (i - 1)
   go (n - 1)
 
-get :: (PrimMonad m) => MutableBitmap (PrimState m) -> Int -> m Bool
+-- | FIXME: doc
+get
+  :: (PrimMonad m)
+  => MutableBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> Int
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
 get bitmap i = stToPrim $ do
   let (UnsafeMkMutableBitmap _ bm) = bitmap
   F.Collection.mutRead bm (F.Offset i)
 
-set :: (PrimMonad m) => MutableBitmap (PrimState m) -> Int -> Bool -> m ()
+-- | FIXME: doc
+set
+  :: (PrimMonad m)
+  => MutableBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> Int
+  -- ^ FIXME: doc
+  -> Bool
+  -- ^ FIXME: doc
+  -> m ()
+  -- ^ FIXME: doc
 set bitmap i b = stToPrim $ do
   let (UnsafeMkMutableBitmap _ bm) = bitmap
   F.Collection.mutWrite bm (F.Offset i) b
 
-isAllTrue :: (PrimMonad m) => MutableBitmap (PrimState m) -> m Bool
+-- | FIXME: doc
+isAllTrue
+  :: (PrimMonad m)
+  => MutableBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
 isAllTrue bitmap = stToPrim $ do
   let (UnsafeMkMutableBitmap n bm) = bitmap
   let go i = if i < 0
@@ -60,7 +111,13 @@ isAllTrue bitmap = stToPrim $ do
                      (b &&) <$> go (i - 1)
   go (n - 1)
 
-isAllFalse :: (PrimMonad m) => MutableBitmap (PrimState m) -> m Bool
+-- | FIXME: doc
+isAllFalse
+  :: (PrimMonad m)
+  => MutableBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
 isAllFalse bitmap = stToPrim $ do
   let (UnsafeMkMutableBitmap n bm) = bitmap
   let go i = if i < 0
