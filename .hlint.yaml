@@ -1,0 +1,404 @@
+- extensions:
+    - default: true
+
+    # These are basically non-negotiable
+    - {name: AllowAmbiguousTypes,      within: []} # should never be necessary
+    - {name: Arrows,                   within: []} # weird syntax
+    - {name: DatatypeContexts,         within: []} # useless
+    - {name: EmptyCase,                within: []} # nearly useless
+    - {name: ImpredicativeTypes,       within: []} # very buggy
+    - {name: IncoherentInstances,      within: []} # footgun
+    - {name: NondecreasingIndentation, within: []} # can be very confusing
+
+    # These can be appealed
+    - {name: ApplicativeDo,            within: []} # buggy
+    - {name: DeriveAnyClass,           within: []} # can be confusing w/ GND
+    - {name: FunctionalDependencies,   within: []} # use TypeFamilies instead
+    - {name: ImplicitParams,           within: []} # dynamically scoped
+    - {name: PatternGuards,            within: []} # ViewPatterns usually better
+    - {name: TemplateHaskell,          within: []} # avoid whenever reasonable
+    - {name: TemplateHaskellQuotes,    within: []} # ditto
+
+    # Exceptions to the above
+    - {name: FunctionalDependencies,   within: [EqSat.IsExpression]}
+
+- modules:
+    # `base` (INCOMPLETE)
+    - {name: [Control.Monad.ST], as: ST}
+    - {name: [Data.STRef],       as: STRef}
+    - {name: [Data.IORef],       as: IORef}
+
+    # `containers` (INCOMPLETE)
+    - {name: [Data.Set],        as: Set}
+    - {name: [Data.Map.Strict], as: Map}
+    - {name: [Data.Map.Lazy],   as: LMap}
+
+    # `unordered-containers` (COMPLETE)
+    - {name: [Data.HashSet],        as: HS}
+    - {name: [Data.HashMap.Strict], as: HM}
+    - {name: [Data.HashMap.Lazy],   as: LHM}
+
+    # `vector` (COMPLETE)
+    - {name: [Data.Vector],                       as: Vector}
+    - {name: [Data.Vector.Mutable],               as: MVector}
+    - {name: [Data.Vector.Primitive],             as: PVector}
+    - {name: [Data.Vector.Primitive.Mutable],     as: PMVector}
+    - {name: [Data.Vector.Storable],              as: SVector}
+    - {name: [Data.Vector.Storable.Mutable],      as: SMVector}
+    - {name: [Data.Vector.Unboxed],               as: UVector}
+    - {name: [Data.Vector.Unboxed.Mutable],       as: UMVector}
+    - {name: [Data.Vector.Fusion.Bundle],         as: Vector.Fusion.B}
+    - {name: [Data.Vector.Fusion.Bundle.Monadic], as: Vector.Fusion.BM}
+    - {name: [Data.Vector.Fusion.Bundle.Size],    as: Vector.Fusion.BS}
+    - {name: [Data.Vector.Fusion.Stream.Monadic], as: Vector.Fusion.SM}
+    - {name: [Data.Vector.Fusion.Util],           as: Vector.Fusion.Util}
+    - {name: [Data.Vector.Internal.Check],        as: Vector.Internal.Check}
+    - {name: [Data.Vector.Generic],               as: Vector.Generic}
+    - {name: [Data.Vector.Generic.Base],          as: Vector.Generic.Base}
+    - {name: [Data.Vector.Generic.New],           as: Vector.Generic.New}
+    - {name: [Data.Vector.Generic.Mutable],       as: MVector.Generic}
+    - {name: [Data.Vector.Generic.Mutable.Base],  as: MVector.Generic.Base}
+    - {name: [Data.Vector.Storable.Internal],     as: SVector.Internal}
+    - {name: [Data.Vector.Unboxed.Base],          as: UVector.Base}
+
+    # `vector-algorithms` (COMPLETE)
+    - {name: [Data.Vector.Algorithms.AmericanFlag], as: Vector.AmericanFlagSort}
+    - {name: [Data.Vector.Algorithms.Heap],         as: Vector.HeapSort}
+    - {name: [Data.Vector.Algorithms.Insertion],    as: Vector.InsertionSort}
+    - {name: [Data.Vector.Algorithms.Intro],        as: Vector.IntroSort}
+    - {name: [Data.Vector.Algorithms.Merge],        as: Vector.MergeSort}
+    - {name: [Data.Vector.Algorithms.Optimal],      as: Vector.OptimalSort}
+    - {name: [Data.Vector.Algorithms.Radix],        as: Vector.RadixSort}
+    - {name: [Data.Vector.Algorithms.Search],       as: Vector.Search}
+    - {name: [Data.Vector.Algorithms.Tim],          as: Vector.TimSort}
+
+    # `judy` (COMPLETE)
+    - {name: [Data.Judy], as: Judy}
+
+    # `eigen` (COMPLETE)
+    - {name: [Data.Eigen.Internal],             as: Eigen}
+    - {name: [Data.Eigen.LA],                   as: Eigen}
+    - {name: [Data.Eigen.Matrix],               as: Eigen}
+    - {name: [Data.Eigen.Matrix.Mutable],       as: Eigen}
+    - {name: [Data.Eigen.Parallel],             as: Eigen}
+    - {name: [Data.Eigen.SparseLA],             as: Eigen}
+    - {name: [Data.Eigen.SparseMatrix],         as: Eigen}
+    - {name: [Data.Eigen.SparseMatrix.Mutable], as: Eigen}
+    - {name: [Data.Eigen.Internal],             as: Eigen.Internal}
+    - {name: [Data.Eigen.LA],                   as: Eigen.LA}
+    - {name: [Data.Eigen.Matrix],               as: Eigen.Matrix}
+    - {name: [Data.Eigen.Matrix.Mutable],       as: Eigen.MMatrix}
+    - {name: [Data.Eigen.Parallel],             as: Eigen.Parallel}
+    - {name: [Data.Eigen.SparseLA],             as: Eigen.SparseLA}
+    - {name: [Data.Eigen.SparseMatrix],         as: Eigen.SparseMatrix}
+    - {name: [Data.Eigen.SparseMatrix.Mutable], as: Eigen.IOSparseMatrix}
+
+    # `system-filepath` (COMPLETE)
+    - {name: [Filesystem.Path],           as: FP}
+    - {name: [Filesystem.Path.CurrentOS], as: [FP, FP.CurrentOS]}
+    - {name: [Filesystem.Path.Rules],     as: [FP, FP.Rules]}
+
+    # `text` (INCOMPLETE)
+    - {name: [Data.Text],      as: Text}
+    - {name: [Data.Text.Lazy], as: LText}
+
+    # `bytestring` (INCOMPLETE)
+    - {name: [Data.ByteString],            as: BS}
+    - {name: [Data.ByteString.Char8],      as: BSC8}
+    - {name: [Data.ByteString.Lazy],       as: LBS}
+    - {name: [Data.ByteString.Lazy.Char8], as: LBSC8}
+
+    # `aeson` (INCOMPLETE)
+    - {name: [Data.Aeson],       as: Aeson}
+    - {name: [Data.Aeson.Types], as: Aeson}
+
+    # `lens` (INCOMPLETE)
+    - {name: [Control.Lens], as: Lens}
+
+    # `mtl`, `transformers` (COMPLETE)
+    - {name: [Control.Monad.Trans.Accum],         as: [Accum, AccumT]}
+    - {name: [Control.Monad.Trans.Class],         as: [MonadTrans]}
+    - {name: [Control.Monad.Cont],                within: []} # not specific
+    - {name: [Control.Monad.Cont.Class],          as: [MonadCont]}
+    - {name: [Control.Monad.Trans.Cont],          as: [Cont, ContT]}
+    - {name: [Control.Monad.Error],               within: []} # not specific
+    - {name: [Control.Monad.Error.Class],         as: [MonadError]}
+    - {name: [Control.Monad.Trans.Error],         as: [Error, ErrorT]}
+    - {name: [Control.Monad.Except],              within: []} # not specific
+    - {name: [Control.Monad.Trans.Except],        as: [Except, ExceptT]}
+    - {name: [Control.Monad.Identity],            within: []} # not specific
+    - {name: [Data.Functor.Identity],             as: [Identity]}
+    - {name: [Control.Monad.Trans.Identity],      as: [IdentityT]}
+    - {name: [Control.Monad.IO.Class],            as: [MonadIO]}
+    - {name: [Control.Monad.List],                within: []} # deprecated
+    - {name: [Control.Monad.Trans.List],          within: []} # deprecated
+    - {name: [Control.Monad.Trans.Maybe],         as: [MaybeT]}
+    - {name: [Control.Monad.Reader],              as: [Reader]}
+    - {name: [Control.Monad.Reader.Class],        as: [MonadReader]}
+    - {name: [Control.Monad.Trans.Reader],        as: [ReaderT]}
+    - {name: [Control.Monad.RWS],                 within: []} # not specific
+    - {name: [Control.Monad.RWS.Strict],          within: []} # not specific
+    - {name: [Control.Monad.RWS.Lazy],            within: []} # not specific
+    - {name: [Control.Monad.Trans.RWS],           within: []} # not specific
+    - {name: [Control.Monad.Trans.RWS.Strict],    as: [RWS, RWST]}
+    - {name: [Control.Monad.Trans.RWS.Lazy],      as: [LRWS, LRWST]}
+    - {name: [Control.Monad.RWS.Class],           as: [MonadRWS]}
+    - {name: [Control.Monad.Trans.Select],        as: [Select, SelectT]}
+    - {name: [Control.Monad.State],               within: []} # not specific
+    - {name: [Control.Monad.State.Strict],        within: []} # not specific
+    - {name: [Control.Monad.State.Lazy],          within: []} # not specific
+    - {name: [Control.Monad.Trans.State],         within: []} # not specific
+    - {name: [Control.Monad.Trans.State.Strict],  as: [State, StateT]}
+    - {name: [Control.Monad.Trans.State.Lazy],    as: [LState, LStateT]}
+    - {name: [Control.Monad.State.Class],         as: [MonadState]}
+    - {name: [Control.Monad.Writer],              within: []} # not specific
+    - {name: [Control.Monad.Writer.Strict],       within: []} # not specific
+    - {name: [Control.Monad.Writer.Lazy],         within: []} # use `Accum`
+    - {name: [Control.Monad.Trans.Writer],        within: []} # not specific
+    - {name: [Control.Monad.Trans.Writer.Strict], as: [Writer, WriterT]}
+    - {name: [Control.Monad.Trans.Writer.Lazy],   within: []} # use `Accum`
+    - {name: [Control.Monad.Writer.Class],        as: [MonadWriter]}
+
+    # `exceptions` (COMPLETE)
+    - {name: [Control.Monad.Catch],      as: [MonadThrow]}
+    - {name: [Control.Monad.Catch],      as: [MonadCatch]}
+    - {name: [Control.Monad.Catch],      as: [MonadMask]}
+    - {name: [Control.Monad.Catch.Pure], as: [Catch, CatchT]}
+
+    # `ether` (COMPLETE)
+    - {name: [Ether],             within: []} # not specific
+    - {name: [Ether.Internal],    within: []} # internal
+    - {name: [Ether.Except],      as: [Ether, EExcept]}
+    - {name: [Ether.Reader],      as: [Ether, EReader]}
+    - {name: [Ether.State],       as: [Ether, EState]}
+    - {name: [Ether.Writer],      as: [Ether, EWriter]}
+    - {name: [Ether.TagDispatch], as: [Ether, ETagDispatch]}
+    - {name: [Ether.TaggedTrans], as: [Ether, ETaggedTrans]}
+
+    # `concurrency` (COMPLETE)
+    - {name: [Control.Concurrent.Classy],             within: []} # not specific
+    - {name: [Control.Monad.Conc.Class],              as: [MonadConc]}
+    - {name: [Control.Concurrent.Classy.Async],       as: [Async]}
+    - {name: [Control.Concurrent.Classy.CRef],        as: [CRef]}
+    - {name: [Control.Concurrent.Classy.Chan],        as: [Chan]}
+    - {name: [Control.Concurrent.Classy.MVar],        as: [MVar]}
+    - {name: [Control.Concurrent.Classy.QSem],        as: [QSem]}
+    - {name: [Control.Concurrent.Classy.QSemN],       as: [QSemN]}
+    - {name: [Control.Monad.STM.Class],               as: [MonadSTM]}
+    - {name: [Control.Concurrent.Classy.STM.TArray],  as: [TArray]}
+    - {name: [Control.Concurrent.Classy.STM.TBQueue], as: [TBQueue]}
+    - {name: [Control.Concurrent.Classy.STM.TChan],   as: [TChan]}
+    - {name: [Control.Concurrent.Classy.STM.TMVar],   as: [TMVar]}
+    - {name: [Control.Concurrent.Classy.STM.TQueue],  as: [TQueue]}
+    - {name: [Control.Concurrent.Classy.STM.TVar],    as: [TVar]}
+
+    # `dejafu` (COMPLETE)
+    - {name: [Test.DejaFu],                         as: [DejaFu]}
+    - {name: [Test.DejaFu.Common],                  as: [DejaFu.Common]}
+    - {name: [Test.DejaFu.Conc],                    as: [DejaFu.Conc]}
+    - {name: [Test.DejaFu.Conc.Internal],           within: []} # internal
+    - {name: [Test.DejaFu.Conc.Internal.Common],    within: []} # internal
+    - {name: [Test.DejaFu.Conc.Internal.Memory],    within: []} # internal
+    - {name: [Test.DejaFu.Conc.Internal.Threading], within: []} # internal
+    - {name: [Test.DejaFu.Defaults],                as: [DejaFu.Defaults]}
+    - {name: [Test.DejaFu.Refinement],              as: [DejaFu.Refinement]}
+    - {name: [Test.DejaFu.SCT],                     as: [DejaFu.SCT]}
+    - {name: [Test.DejaFu.SCT.Internal],            within: []} # internal
+    - {name: [Test.DejaFu.STM],                     as: [DejaFu.STM]}
+    - {name: [Test.DejaFu.STM.Internal],            within: []} # internal
+    - {name: [Test.DejaFu.Schedule],                as: [DejaFu.Schedule]}
+
+    # `smallcheck` (COMPLETE)
+    - {name: [Test.SmallCheck],         as: SC}
+    - {name: [Test.SmallCheck.Drivers], as: SC}
+    - {name: [Test.SmallCheck.Series],  as: SC}
+
+    # `QuickCheck` (COMPLETE)
+    - {name: [Test.QuickCheck],           as: QC}
+    - {name: [Test.QuickCheck.Arbitrary], as: QC}
+    - {name: [Test.QuickCheck.Function],  as: QC}
+    - {name: [Test.QuickCheck.Gen],       as: QC}
+    - {name: [Test.QuickCheck.Modifiers], as: QC}
+    - {name: [Test.QuickCheck.Monadic],   as: QC}
+    - {name: [Test.QuickCheck.Poly],      as: QC}
+    - {name: [Test.QuickCheck.Property],  as: QC}
+    - {name: [Test.QuickCheck.Test],      as: QC}
+
+    # `quickcheck-instances` (COMPLETE)
+    - {name: [Test.QuickCheck.Instances], as: QC}
+
+    # `hedgehog` (COMPLETE)
+    - {name: [Hedgehog],                       as: HH}
+    - {name: [Hedgehog.Gen],                   as: HH.Gen}
+    - {name: [Hedgehog.Range],                 as: HH.Range}
+    - {name: [Hedgehog.Range],                 as: HH.Range}
+    - {name: [Hedgehog.Internal.Config],       as: HH.Internal.Config}
+    - {name: [Hedgehog.Internal.Discovery],    as: HH.Internal.Discovery}
+    - {name: [Hedgehog.Internal.Distributive], as: HH.Internal.Distributive}
+    - {name: [Hedgehog.Internal.Exception],    as: HH.Internal.Exception}
+    - {name: [Hedgehog.Internal.Gen],          as: HH.Internal.Gen}
+    - {name: [Hedgehog.Internal.HTraversable], as: HH.Internal.HTraversable}
+    - {name: [Hedgehog.Internal.Opaque],       as: HH.Internal.Opaque}
+    - {name: [Hedgehog.Internal.Property],     as: HH.Internal.Property}
+    - {name: [Hedgehog.Internal.Queue],        as: HH.Internal.Queue}
+    - {name: [Hedgehog.Internal.Range],        as: HH.Internal.Range}
+    - {name: [Hedgehog.Internal.Region],       as: HH.Internal.Region}
+    - {name: [Hedgehog.Internal.Report],       as: HH.Internal.Report}
+    - {name: [Hedgehog.Internal.Runner],       as: HH.Internal.Runner}
+    - {name: [Hedgehog.Internal.Seed],         as: HH.Internal.Seed}
+    - {name: [Hedgehog.Internal.Show],         as: HH.Internal.Show}
+    - {name: [Hedgehog.Internal.Shrink],       as: HH.Internal.Shrink}
+    - {name: [Hedgehog.Internal.Source],       as: HH.Internal.Source}
+    - {name: [Hedgehog.Internal.State],        as: HH.Internal.State}
+    - {name: [Hedgehog.Internal.TH],           as: HH.Internal.TH}
+    - {name: [Hedgehog.Internal.Tree],         as: HH.Internal.Tree}
+    - {name: [Hedgehog.Internal.Tripping],     as: HH.Internal.Tripping}
+
+    # `hedgehog-corpus` (COMPLETE)
+    - {name: [Hedgehog.Corpus], as: HH.Corpus}
+
+    # `hedgehog-quickcheck` (COMPLETE)
+    - {name: [Hedgehog.Gen.QuickCheck],  as: HH.QuickCheck}
+    - {name: [Test.QuickCheck.Hedgehog], as: QC.Hedgehog}
+
+    # `tasty` (COMPLETE)
+    - {name: [Test.Tasty],                             as: [T, Tasty]}
+    - {name: [Test.Tasty.Ingredients],                 as: [T, Tasty]}
+    - {name: [Test.Tasty.Ingredients.Basic],           as: [T, Tasty]}
+    - {name: [Test.Tasty.Ingredients.ConsoleReporter], as: [T, Tasty]}
+    - {name: [Test.Tasty.Options],                     as: [T, Tasty]}
+    - {name: [Test.Tasty.Patterns.Eval],               as: [T, Tasty]}
+    - {name: [Test.Tasty.Patterns.Parser],             as: [T, Tasty]}
+    - {name: [Test.Tasty.Patterns.Types],              as: [T, Tasty]}
+    - {name: [Test.Tasty.Providers],                   as: [T, Tasty]}
+    - {name: [Test.Tasty.Runners],                     as: [T, Tasty]}
+
+    # `tasty-hunit` (COMPLETE)
+    - {name: [Test.Tasty.HUnit], as: [T.HUnit, Tasty.HUnit]}
+
+    # `tasty-html` (COMPLETE)
+    - {name: [Test.Tasty.Runners.Html], as: [T.HTML, Tasty.HTML]}
+
+    # `tasty-lens` (COMPLETE)
+    - {name: [Test.Tasty.Lens.Iso],       as: [T.Iso,       Tasty.Iso]}
+    - {name: [Test.Tasty.Lens.Lens],      as: [T.Lens,      Tasty.Lens]}
+    - {name: [Test.Tasty.Lens.Prism],     as: [T.Prism,     Tasty.Prism]}
+    - {name: [Test.Tasty.Lens.Setter],    as: [T.Setter,    Tasty.Setter]}
+    - {name: [Test.Tasty.Lens.Traversal], as: [T.Traversal, Tasty.Traversal]}
+
+    # `tasty-hedgehog` (COMPLETE)
+    - {name: [Test.Tasty.Hedgehog], as: [Tasty.HH]}
+
+    # `tasty-quickcheck` (COMPLETE)
+    - {name: [Test.Tasty.QuickCheck], as: [Tasty.QC]}
+
+    # `tasty-smallcheck` (COMPLETE)
+    - {name: [Test.Tasty.SmallCheck], as: [Tasty.SC]}
+
+    # `loc` (COMPLETE)
+    - {name: [Data.Loc],                  as: [Loc]}
+    - {name: [Data.Loc.Area],             as: [Loc, Loc.Area]}
+    - {name: [Data.Loc.Exception],        as: [Loc, Loc.Exception]}
+    - {name: [Data.Loc.Internal.Map],     within: []} # internal
+    - {name: [Data.Loc.Internal.Prelude], within: []} # internal
+    - {name: [Data.Loc.List.OneToTwo],    as: [Loc, Loc.OneToTwo]}
+    - {name: [Data.Loc.List.ZeroToTwo],   as: [Loc, Loc.ZeroToTwo]}
+    - {name: [Data.Loc.Loc],              as: [Loc, Loc.Loc]}
+    - {name: [Data.Loc.Pos],              as: [Loc, Loc.Pos]}
+    - {name: [Data.Loc.Span],             as: [Loc, Loc.Span]}
+    - {name: [Data.Loc.Types],            as: [Loc, Loc.Types]}
+
+    # `loc-test` (COMPLETE)
+    - {name: [Test.Loc.Hedgehog.Gen], as: [Loc.HH]}
+
+    # `unexceptionalio` (COMPLETE)
+    - {name: [UnexceptionalIO], as: UIO}
+
+    # `sbv` (COMPLETE)
+    - {name: [Data.SBV],                  as: SBV}
+    - {name: [Data.SBV.Control],          as: [SBV, SBV.Control]}
+    - {name: [Data.SBV.Dynamic],          as: [SBV, SBV.Dynamic]}
+    - {name: [Data.SBV.Tools.CodeGen],    as: [SBV, SBV.Tools.CodeGen]}
+    - {name: [Data.SBV.Tools.GenTest],    as: [SBV, SBV.Tools.GenTest]}
+    - {name: [Data.SBV.Tools.Polynomial], as: [SBV, SBV.Tools.Polynomial]}
+    - {name: [Data.SBV.Tools.STree],      as: [SBV, SBV.Tools.STree]}
+    - {name: [Data.SBV.Internals],        as: [SBV, SBV.Internals]}
+
+    # `primitive` (COMPLETE)
+    - {name: [Control.Monad.Primitive],      as: [Prim, PrimMonad]}
+    - {name: [Data.Primitive],               as: [Prim]}
+    - {name: [Data.Primitive.Addr],          as: [Prim, Prim.Addr]}
+    - {name: [Data.Primitive.Array],         as: [Prim, Prim.Array]}
+    - {name: [Data.Primitive.ByteArray],     as: [Prim, Prim.ByteArray]}
+    - {name: [Data.Primitive.MachDeps],      as: [Prim, Prim.MachDeps]}
+    - {name: [Data.Primitive.MutVar],        as: [Prim, Prim.MutVar]}
+    - {name: [Data.Primitive.SmallArray],    as: [Prim, Prim.SmallArray]}
+    - {name: [Data.Primitive.Types],         as: [Prim, Prim.Types]}
+    - {name: [Data.Primitive.UnliftedArray], as: [Prim, Prim.UnliftedArray]}
+
+    # `impure-containers` (COMPLETE)
+    - {name: [Data.ArrayList.Generic],      as: [ArrayList]}
+    - {name: [Data.Graph.Immutable],        as: [Graph,  Graph.Immutable]}
+    - {name: [Data.Graph.Mutable],          as: [MGraph, Graph.Mutable]}
+    - {name: [Data.Graph.Types],            as: [Graph,  Graph.Types]}
+    - {name: [Data.Graph.Types.Internal],   as: [Graph,  Graph.Internal]}
+    - {name: [Data.HashMap.Mutable.Basic],  as: [MHashMap]}
+    - {name: [Data.Heap.Mutable.ModelC],    as: [MHeapC]}
+    - {name: [Data.Heap.Mutable.ModelD],    as: [MHeapD]}
+    - {name: [Data.Maybe.Unsafe],           as: [UnsafeMaybe]}
+    - {name: [Data.Primitive.Array.Maybe],  as: [MutableMaybeArray]}
+    - {name: [Data.Primitive.Bool],         as: [BoolByte]}
+    - {name: [Data.Primitive.MutVar.Maybe], as: [MutMaybeVar]}
+    - {name: [Data.Primitive.PrimArray],    as: [MutablePrimArray]}
+    - {name: [Data.Trie.Immutable.Bits],    as: [Trie]}
+    - {name: [Data.Trie.Mutable.Bits],      as: [MTrie]}
+
+    # `foundation` (INCOMPLETE)
+    # FIXME: add rules
+
+    # `nondeterminism` (COMPLETE)
+    - {name: [Control.Monad.Amb], as: [Amb, AmbT]}
+
+    # `hashable` (COMPLETE)
+    - {name: [Data.Hashable],        as: [Hashable]}
+    - {name: [Data.Hashable.Lifted], as: [Hashable.Lifted]}
+
+    # `flow` (COMPLETE)
+    - {name: [Flow], as: [Flow]}
+
+    # `eqsat` (COMPLETE)
+    - {name: [EqSat],               as: EqSat}
+    - {name: [EqSat.Variable],      as: [EqSat, Variable]}
+    - {name: [EqSat.Term],          as: [EqSat, Term]}
+    - {name: [EqSat.Equation],      as: [EqSat, Equation]}
+    - {name: [EqSat.IsExpression],  as: [EqSat, IsExpression]}
+    - {name: [EqSat.GraphMatching], as: [EqSat, GraphMatching]}
+    - {name: [EqSat.Matrix],        as: [EqSat, Matrix]}
+    - {name: [EqSat.MutableBitmap], as: [EqSat, MutableBitmap]}
+    - {name: [EqSat.MGraph],        as: [EqSat, MGraph]}
+    - {name: [EqSat.MHashMap],      as: [EqSat, MHashMap]}
+    - {name: [EqSat.MHashSet],      as: [EqSat, MHashSet]}
+
+- functions:
+    - {name: unsafePerformIO, within: []}
+    - {name: unsafeIOToPrim,  within: [EqSat.Matrix]}
+    - {name: unsafeIOToST,    within: []}
+    - {name: unsafeFromIO,    within: []} # `unexceptionalio`
+
+# Custom hint example: `- error: {lhs: "wibbleMany [x]", rhs: "wibbleOne x"}`
+
+- warn: {name: Use explicit module export list}
+
+- ignore: {name: Redundant bracket}
+- ignore: {name: Redundant do}
+- ignore: {name: Redundant lambda}
+- ignore: {name: Avoid lambda}
+- ignore: {name: Use ||}
+- ignore: {name: Use uncurry}
+
+- fixity: "infixl 0 |>"
+- fixity: "infixr 0 <|"
+- fixity: "infixl 0 !>"
+- fixity: "infixr 0 <!"
+- fixity: "infixl 9 .>"
+- fixity: "infixr 9 <."

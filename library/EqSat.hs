@@ -42,11 +42,8 @@ import           Control.Monad.Except      (MonadError (throwError))
 
 import           Data.Hashable             (Hashable)
 
-import           Data.HashMap.Strict       (HashMap)
-import qualified Data.HashMap.Strict       as HashMap
-
-import           Data.HashSet              (HashSet)
-import qualified Data.HashSet              as HashSet
+import qualified Data.HashMap.Strict       as HM
+import qualified Data.HashSet              as HS
 
 import qualified Data.Graph.Immutable      as Graph
 import qualified Data.Graph.Mutable        as MGraph
@@ -310,9 +307,9 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
         let vec = Vector.fromList (zip [0..] (Vector.toList cls))
         Vector.forM vec $ \(i, vertex) -> do
           pure (vertex, var .== fromIntegral i)
-    let predMap = HashMap.fromList (Vector.toList predicates)
+    let predMap = HM.fromList (Vector.toList predicates)
     peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
-      case HashMap.lookup vertex predMap of
+      case HM.lookup vertex predMap of
         Just b  -> pure (node, b)
         Nothing -> error "this should never happen"
     goal <- heuristic (MkEPEG peg (epegEqRelation epeg))
@@ -364,7 +361,7 @@ matchPattern
      (Eq node, Ord var, Hashable var)
   => Term node var
   -> EPEG g node
-  -> Maybe (HashMap var (EPEG g node))
+  -> Maybe (HM.HashMap var (EPEG g node))
 matchPattern = do
   let go :: forall s.
             MHashMap s var (EPEG g node)
