@@ -73,6 +73,9 @@ import           GHC.Generics              (Generic)
 import           MHashMap                  (MHashMap)
 import qualified MHashMap
 
+import           MHashSet                  (MHashSet)
+import qualified MHashSet
+
 --------------------------------------------------------------------------------
 
 newtype Variable
@@ -83,7 +86,7 @@ instance Hashable Variable
 
 --------------------------------------------------------------------------------
 
--- | A type of term trees. Each node in the tree contains a `PEGNode` and has an
+-- | A type of term trees. Each node in the tree contains a value and has an
 --   arbitrary number of children. This type is polymorphic over the type of
 --   variables to exploit a trick that allows us to use the same type for terms
 --   with and without metasyntactic variables.
@@ -92,26 +95,11 @@ data Term node var
   | MkNodeTerm node (Vector (Term node var))
   deriving (Eq, Ord)
 
--- | An open term may have variables.
---
---   When I say "variable", I don't mean variables in the actual AST;
---   these are more like metasyntactic variables that may stand for any term.
+-- | An open term may have (metasyntactic) variables.
 type OpenTerm node = Term node Variable
 
 -- | A closed term is one without any variables.
 type ClosedTerm node = Term node Void
-
-makeNodeOpenTerm
-  :: (Ord var)
-  => node
-  -> Vector (Term node var)
-  -> Maybe (Term node var)
-makeNodeOpenTerm node subterms = do
-  let vars = Vector.map freeVars subterms
-  let sum1 = Vector.sum (Vector.map Set.size vars)
-  let sum2 = Set.size (Set.unions (Vector.toList vars))
-  guard (sum1 == sum2)
-  pure (MkNodeTerm node subterms)
 
 -- | Helper function to get the `Set` of free variables in the given `Term`.
 freeVars :: (Ord var) => Term node var -> Set var
