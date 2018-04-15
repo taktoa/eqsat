@@ -1,16 +1,12 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE DeriveGeneric          #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 --------------------------------------------------------------------------------
 
@@ -89,11 +85,8 @@ import qualified EqSat.Term                as Term
 import           EqSat.Equation            (Equation)
 import qualified EqSat.Equation            as Equation
 
---------------------------------------------------------------------------------
-
-class Expression node expr | expr -> node where
-  exprToTerm :: expr -> ClosedTerm node
-  termToExpr :: ClosedTerm node -> Either SomeException expr
+import           EqSat.IsExpression
+                 (IsExpression (exprToTerm, termToExpr))
 
 --------------------------------------------------------------------------------
 
@@ -285,12 +278,22 @@ saturate
   -> (PEG g node -> IO (Maybe a))
   -> IO [a]
 saturate eqs heuristic initial timer cb = do
-  undefined
+  let go epeg soFar = do
+        case saturateStep eqs epeg of
+          Just epeg' -> do let recurse = go epeg'
+                           shouldSelectBest <- timer epeg'
+                           if shouldSelectBest
+                             then cb (selectBest heuristic epeg')
+                                  >>= \case (Just x) -> recurse (x : soFar)
+                                            Nothing  -> recurse soFar
+                             else recurse soFar
+          Nothing    -> pure soFar
+  go initial []
 
 -- | The public interface of equality saturation.
 equalitySaturation
   :: forall node expr a.
-     (Expression node expr)
+     (IsExpression node expr)
   => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
   -> PerformanceHeuristic node
