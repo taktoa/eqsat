@@ -1,0 +1,142 @@
+--------------------------------------------------------------------------------
+
+name:                     eqsat
+version:                  0.1.0
+stability:                Experimental
+build-type:               Simple
+cabal-version:            >= 1.10
+category:                 Compiler
+copyright:                Copyright 2018 Remy Goldschmidt
+author:                   Remy Goldschmidt
+maintainer:               taktoa@gmail.com
+license:                  Apache-2.0
+license-file:             LICENSE.md
+homepage:                 https://github.com/taktoa/eqsat
+bug-reports:              https://github.com/taktoa/eqsat/issues
+synopsis:                 A generic Haskell implementation of the
+                          equality saturation algorithm for superoptimization.
+description:              A generic Haskell implementation of the
+                          equality saturation algorithm for superoptimization.
+extra-source-files:       README.md
+tested-with:              GHC == 8.0.2
+
+--------------------------------------------------------------------------------
+
+source-repository head
+    type:                 git
+    tag:                  master
+    location:             https://github.com/taktoa/eqsat.git
+
+--------------------------------------------------------------------------------
+
+library
+    hs-source-dirs:       library
+    build-depends:        base                        >= 4.8   && < 5.0
+                        , judy                        >= 0.4   && < 0.5
+                        , aeson                       >= 1.0   && < 1.3
+                        , bytestring                  >= 0.10  && < 0.11
+                        , containers                  >= 0.5   && < 0.6
+                        , flow                        >= 1.0   && < 1.1
+                        , hashable                    >= 1.2   && < 1.3
+                        , lens                        >= 4.15  && < 4.16
+                        , mtl                         >= 2.2   && < 2.3
+                        , QuickCheck                  >= 2.9   && < 2.10
+                        , quickcheck-instances        >= 0.3   && < 0.4
+                        , semigroups                  >= 0.18  && < 0.19
+                        , smallcheck                  >= 1.1   && < 1.2
+                        , system-filepath             >= 0.4   && < 0.5
+                        , tasty                       >= 0.11  && < 0.12
+                        , tasty-html                  >= 0.4   && < 0.5
+                        , tasty-hunit                 >= 0.9   && < 0.10
+                        , tasty-lens                  >= 0.3   && < 0.4
+                        , tasty-quickcheck            >= 0.8   && < 0.9
+                        , tasty-smallcheck            >= 0.8   && < 0.9
+                        , hedgehog                    >= 0.5   && < 0.6
+                        , tasty-hedgehog              >= 0.1   && < 0.2
+                        , text                        >= 1.2   && < 1.3
+                        , transformers                >= 0.4   && < 0.6
+                        , unordered-containers        >= 0.2   && < 0.3
+                        , loc
+                        , impure-containers
+                        , foundation
+                        , unexceptionalio
+                        , eigen
+                        , primitive
+                        , vector
+                        , vector-algorithms
+                        , sbv
+                        , nondeterminism
+    exposed-modules:      EqSat
+                        , EqSat.Term
+                        , EqSat.Equation
+                        , EqSat.Variable
+                        , EqSat.IsExpression
+                        , EqSat.MHashSet
+                        , EqSat.MHashMap
+                        , EqSat.MutableBitmap
+                        , EqSat.GraphMatching
+                        , EqSat.Matrix
+                        , EqSat.MGraph
+    default-language:     Haskell2010
+    -- FIXME: add other-extensions list
+    if impl(ghc >= 8.0)
+        ghc-options:      -Wcompat -Weverything
+                          -fno-warn-unsafe
+                          -fno-warn-safe
+                          -fno-warn-implicit-prelude
+                          -fno-warn-unused-do-bind
+                          -fno-warn-missed-specialisations
+                          -fno-warn-all-missed-specialisations
+                          -g
+    else
+        ghc-options:      -Wall -g
+
+--------------------------------------------------------------------------------
+
+test-suite tests
+    type:                 exitcode-stdio-1.0
+    hs-source-dirs:       tests
+    main-is:              Tests.hs
+    other-modules:        Tests.Unit
+                        , Tests.Integration
+    build-depends:        eqsat
+                        , base                        >= 4.8   && < 5.0
+                        , aeson                       >= 1.0   && < 1.3
+                        , bytestring                  >= 0.10  && < 0.11
+                        , containers                  >= 0.5   && < 0.6
+                        , flow                        >= 1.0   && < 1.1
+                        , hashable                    >= 1.2   && < 1.3
+                        , lens                        >= 4.15  && < 4.16
+                        , mtl                         >= 2.2   && < 2.3
+                        , QuickCheck                  >= 2.9   && < 2.10
+                        , quickcheck-instances        >= 0.3   && < 0.4
+                        , semigroups                  >= 0.18  && < 0.19
+                        , smallcheck                  >= 1.1   && < 1.2
+                        , system-filepath             >= 0.4   && < 0.5
+                        , tasty                       >= 0.11  && < 0.12
+                        , tasty-html                  >= 0.4   && < 0.5
+                        , tasty-hunit                 >= 0.9   && < 0.10
+                        , tasty-lens                  >= 0.3   && < 0.4
+                        , tasty-quickcheck            >= 0.8   && < 0.9
+                        , tasty-smallcheck            >= 0.8   && < 0.9
+                        , hedgehog                    >= 0.5   && < 0.6
+                        , tasty-hedgehog              >= 0.1   && < 0.2
+                        , text                        >= 1.2   && < 1.3
+                        , transformers                >= 0.4   && < 0.6
+                        , unordered-containers        >= 0.2   && < 0.3
+    default-language:     Haskell2010
+    -- FIXME: add other-extensions list
+    if impl(ghc >= 8.0)
+        ghc-options:      -Wcompat -Weverything
+                          -fno-warn-unsafe
+                          -fno-warn-safe
+                          -fno-warn-implicit-prelude
+                          -fno-warn-unused-do-bind
+                          -fno-warn-missed-specialisations
+                          -fno-warn-all-missed-specialisations
+                          -g -threaded
+    else
+        ghc-options:      -Wall
+                          -g -threaded
+
+--------------------------------------------------------------------------------

@@ -338,13 +338,19 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
           |> \case [x] -> pure x
                    _   -> empty
 
+  representativeMap <- pure $ runST $ do
+    hm <- MHashMap.new @_ @(Vertex g) @(Vertex g)
+    undefined
+    -- Vector.forM_
+    MHashMap.freeze hm
+
   modifyPEG (epegPEG epeg) $ \graph -> do
-    foo <- pure $ runST $ do
-      fmap Graph.Internal.Graph $ Graph.create $ \mgraph -> do
-        undefined
-      -- case graph of
-      --    MkSomePEG (UnsafeMkPEG)
-      undefined
+    -- pure $ flip Graph.mapVertices graph $ \vertex label -> do
+      -- fmap Graph.Internal.Graph $ Graph.create $ \mgraph -> do
+      --   undefined
+      -- -- case graph of
+      -- --    MkSomePEG (UnsafeMkPEG)
+      -- undefined
     undefined
   -- let convertModel :: SMTModel
   -- case result of

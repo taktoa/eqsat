@@ -94,22 +94,22 @@ graphToAdjacencyMatrix
 graphToAdjacencyMatrix
   = undefined
 
-bipartiteMatching :: Graph g e Int -> Maybe (Graph g e Int)
-bipartiteMatching graph = runST $ MaybeT.runMaybeT $ do
-  let graphSize = Graph.sizeInt (Graph.size graph)
-  let amatrix = graphToAdjacencyMatrix graph
-  bmatrix <- MaybeT (pure (Matrix.invertSquareMatrix @Float @CFloat amatrix))
-             >>= (Matrix.thawMatrix .> lift)
-  mmatrix <- Matrix.newMutableMatrix @'Dense (Matrix.shapeMatrix amatrix)
-
-  forM_ [0 .. graphSize - 1] $ \c -> do
-    forM_ [0 .. graphSize - 1] $ \r -> do
-      let x = (Matrix.coeffMatrix (c, r) amatrix) :: Float
-      y <- id @Float <$> Matrix.getMutableMatrix (r, c) bmatrix
-      when ((x /= (0.0 :: Float)) && (y /= (0.0 :: Float))) $ do
-
-        undefined
-  undefined
+-- bipartiteMatching :: Graph g e Int -> Maybe (Graph g e Int)
+-- bipartiteMatching graph = runST $ MaybeT.runMaybeT $ do
+--   let graphSize = Graph.sizeInt (Graph.size graph)
+--   let amatrix = graphToAdjacencyMatrix graph
+--   bmatrix <- MaybeT (pure (Matrix.invertSquareMatrix @Float @CFloat amatrix))
+--              >>= (Matrix.thawMatrix .> lift)
+--   mmatrix <- Matrix.newMutableMatrix @'Dense (Matrix.shapeMatrix amatrix)
+--
+--   forM_ [0 .. graphSize - 1] $ \c -> do
+--     forM_ [0 .. graphSize - 1] $ \r -> do
+--       let x = (Matrix.coeffMatrix (c, r) amatrix) :: Float
+--       y <- id @Float <$> Matrix.getMutableMatrix (r, c) bmatrix
+--       when ((x /= (0.0 :: Float)) && (y /= (0.0 :: Float))) $ do
+--
+--         undefined
+--   undefined
 
 -- graphToSparseMatrix
 --   ::
