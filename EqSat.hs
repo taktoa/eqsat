@@ -10,6 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeFamilies              #-}
 
 --------------------------------------------------------------------------------
@@ -24,11 +25,14 @@ module EqSat
 import           Control.Exception
                  (Exception, SomeException, catch, throw, throwIO)
 
+import           Control.Applicative       (empty)
+
 import           Control.Monad
 
 import           Control.Monad.Primitive
 import           Control.Monad.ST          (ST, runST)
 
+import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Trans.Class (MonadTrans (lift))
 import qualified Control.Monad.Trans.Class as MonadTrans
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT))
@@ -40,6 +44,9 @@ import           Data.Hashable             (Hashable)
 
 import           Data.HashMap.Strict       (HashMap)
 import qualified Data.HashMap.Strict       as HashMap
+
+import           Data.HashSet              (HashSet)
+import qualified Data.HashSet              as HashSet
 
 import qualified Data.Graph.Immutable      as Graph
 import qualified Data.Graph.Mutable        as MGraph
@@ -63,6 +70,8 @@ import qualified Data.Map.Strict           as Map
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 
+import           Data.Word                 (Word32)
+
 import           Data.Vector               (Vector)
 import qualified Data.Vector               as Vector
 
@@ -71,6 +80,7 @@ import           Data.Void                 (Void, absurd)
 import           Data.SBV
                  (SInteger, Symbolic, (.<), (.<=), (.==))
 import qualified Data.SBV                  as SBV
+import qualified Data.SBV.Internals        as SBV.Internals
 
 import           Flow                      ((.>), (|>))
 
@@ -168,9 +178,13 @@ pegToTerm peg = MkNodeTerm (Graph.atVertex (pegRoot peg) (pegGraph peg))
 -- Modify a PEG, returning `Nothing` if the modification you made to the
 -- underlying `Graph` made the PEG no longer valid (e.g.: you added two edges
 -- out of the same node with the edge labels).
-modifyPEG :: (Graph g Int node -> Graph g Int node)
-          -> PEG g node -> Maybe (PEG g node)
-modifyPEG = undefined
+modifyPEG
+  :: (Monad m)
+  => PEG g node
+  -> (Graph g Int node -> MaybeT m (Graph g' Int node))
+  -> MaybeT m (PEG g' node)
+modifyPEG peg f = do
+  undefined
 
 normalizePEG
   :: PEG g node
@@ -183,6 +197,12 @@ normalizePEG input = runST $ do
   output  <- STRef.readSTRef pegRef
   pure (updater, output)
 
+traversePEG
+  :: (Monad m)
+  => PEG g nodeA
+  -> (Vertex g -> nodeA -> m nodeB)
+  -> m (PEG g nodeB)
+traversePEG = undefined
 
 --------------------------------------------------------------------------------
 
@@ -244,6 +264,9 @@ epegChildren (MkEPEG peg eq) = (\p -> MkEPEG p eq) <$> pegChildren peg
 epegRootNode :: EPEG g node -> node
 epegRootNode (MkEPEG peg _) = pegRootNode peg
 
+epegGetClass :: EPEG g node -> Vertex g -> Maybe (Set (Vertex g))
+epegGetClass = undefined
+
 epegClasses :: EPEG g node -> Set (Set (Vertex g))
 epegClasses = undefined
 
@@ -259,19 +282,73 @@ epegClasses = undefined
 -- If we were using the `sbv` library, for example, it would be reasonable
 -- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
 type PerformanceHeuristic node
-  = forall g. PEG g node -> Symbolic SInteger
+  = forall g. EPEG g (node, SBV.SBool) -> Symbolic SInteger
 
-makePerformanceHeuristic
-  :: PerformanceHeuristic node
-makePerformanceHeuristic epeg = do
-  let classes = zip [0..] (Set.toList (epegClasses epeg))
-  variablePairs <- forM classes $ \(i, cls) -> do
-    let vec = Vector.fromList (Set.toList cls)
-    let n = Vector.length vec
-    var <- SBV.exists (show i)
-    SBV.constrain (0 .<= var)
-    SBV.constrain (var .< fromIntegral n)
-    pure (var, vec)
+runPerformanceHeuristic
+  :: forall g node m.
+     (MonadIO m)
+  => EPEG g node
+  -> PerformanceHeuristic node
+  -> m (Maybe (SomePEG node))
+runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
+  let classesSet :: Set (Set (Vertex g))
+      classesSet = epegClasses epeg
+
+  let classes :: Vector (Int, Vector (Vertex g))
+      classes = Set.toList classesSet
+                |> map (Set.toList .> Vector.fromList)
+                |> zip [0..]
+                |> Vector.fromList
+
+  optimizeResult <- liftIO $ SBV.optimize SBV.Lexicographic $ do
+    predicates <- mconcat . Vector.toList <$> do
+      Vector.forM classes $ \(i, cls) -> do
+        let n = Vector.length cls
+        var <- SBV.sWord32 (show i)
+        -- SBV.constrain (0 .<= var)
+        SBV.constrain (var .< fromIntegral n)
+        let vec = Vector.fromList (zip [0..] (Vector.toList cls))
+        Vector.forM vec $ \(i, vertex) -> do
+          pure (vertex, var .== fromIntegral i)
+    let predMap = HashMap.fromList (Vector.toList predicates)
+    peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
+      case HashMap.lookup vertex predMap of
+        Just b  -> pure (node, b)
+        Nothing -> error "this should never happen"
+    goal <- heuristic (MkEPEG peg (epegEqRelation epeg))
+    SBV.maximize "heuristic" goal
+
+  (SBV.LexicographicResult result) <- pure optimizeResult
+
+  let getValue :: Int -> MaybeT m Word32
+      getValue i = SBV.getModelValue (show i) result |> pure |> MaybeT
+
+  vertices <- Vector.forM classes $ \(i, cls) -> do
+    value <- getValue i -- default?
+    Vector.indexM cls (fromIntegral value)
+
+  let vertexSet = HashSet.fromList (Vector.toList vertices)
+
+  let keepVertex = HashSet.member vertexSet
+
+  rootClass <- MaybeT (pure (epegGetClass epeg (pegRoot (epegPEG epeg))))
+
+  root <- Vector.filter (`Set.member` rootClass) vertices
+          |> Vector.toList
+          |> \case [x] -> pure x
+                   _   -> empty
+
+  modifyPEG (epegPEG epeg) $ \graph -> do
+    foo <- pure $ runST $ do
+      fmap Graph.Internal.Graph $ Graph.create $ \mgraph -> do
+        undefined
+      -- case graph of
+      --    MkSomePEG (UnsafeMkPEG)
+      undefined
+    undefined
+  -- let convertModel :: SMTModel
+  -- case result of
+  --   SBV.Satisfiable
   undefined
 
 --------------------------------------------------------------------------------
