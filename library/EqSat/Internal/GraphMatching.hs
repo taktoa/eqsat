@@ -66,8 +66,8 @@ import           Foreign.C.Types                  (CFloat)
 
 import           Flow                             ((.>), (|>))
 
-import           EqSat.Internal.MutableBitmap     (MutableBitmap)
-import qualified EqSat.Internal.MutableBitmap     as MutableBitmap
+import           EqSat.Internal.MBitmap           (MBitmap)
+import qualified EqSat.Internal.MBitmap           as MBitmap
 
 import           EqSat.Internal.Matrix
                  (Matrix, MutableMatrix, Packing (Dense, Sparse))
@@ -84,10 +84,10 @@ guardM action = action >>= guard
 isConsecutive :: Graph g e Int -> Bool
 isConsecutive graph = runST $ do
   let graphSize = Graph.sizeInt (Graph.size graph)
-  bitmap <- MutableBitmap.new graphSize
+  bitmap <- MBitmap.new graphSize
   Vector.forM_ (Graph.verticesToVector (Graph.vertices graph))
-    $ \v -> MutableBitmap.set bitmap v True
-  MutableBitmap.isAllTrue bitmap
+    $ \v -> MBitmap.set bitmap v True
+  MBitmap.isAllTrue bitmap
 
 graphToAdjacencyMatrix
   :: Graph g e Int -> Matrix 'Dense Float CFloat

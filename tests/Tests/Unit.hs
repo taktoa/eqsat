@@ -14,14 +14,14 @@ import qualified EqSat.Equation                         as Equation
 import qualified EqSat.Internal.GraphMatching           as GraphMatching
 import           EqSat.Internal.Matrix                  (Matrix)
 import qualified EqSat.Internal.Matrix                  as Matrix
+import           EqSat.Internal.MBitmap                 (MBitmap)
+import qualified EqSat.Internal.MBitmap                 as MBitmap
 import qualified EqSat.Internal.MGraph                  ()
 import qualified EqSat.Internal.MGraph                  as MGraph
 import           EqSat.Internal.MHashMap                (MHashMap)
 import qualified EqSat.Internal.MHashMap                as MHashMap
 import           EqSat.Internal.MHashSet                (MHashSet)
 import qualified EqSat.Internal.MHashSet                as MHashSet
-import           EqSat.Internal.MutableBitmap           (MutableBitmap)
-import qualified EqSat.Internal.MutableBitmap           as MutableBitmap
 import           EqSat.IsExpression
                  (IsExpression (exprToTerm, termToExpr))
 import           EqSat.Term                             (Term)

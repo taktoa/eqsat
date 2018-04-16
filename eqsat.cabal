@@ -79,7 +79,7 @@ library
                         , EqSat.IsExpression
                         , EqSat.Internal.MHashSet
                         , EqSat.Internal.MHashMap
-                        , EqSat.Internal.MutableBitmap
+                        , EqSat.Internal.MBitmap
                         , EqSat.Internal.GraphMatching
                         , EqSat.Internal.Matrix
                         , EqSat.Internal.MGraph
