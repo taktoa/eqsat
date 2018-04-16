@@ -1,0 +1,32 @@
+diff --git a/Data/Judy.hsc b/Data/Judy.hsc
+index f98bf74..b2f5b62 100644
+--- a/Data/Judy.hsc
++++ b/Data/Judy.hsc
+@@ -62,7 +62,9 @@
+ module Data.Judy (
+ 
+     -- * Basic types
+-    JudyL, Key
++    Data.Judy.JudyL
++    , Data.Judy.Key
++    , Data.Judy.JudyImmutable
+ 
+     -- * Construction
+     , Data.Judy.new
+@@ -87,12 +89,14 @@ module Data.Judy (
+     , Data.Judy.keys
+     , Data.Judy.elems
+     , Data.Judy.toList
+--- memoryUsed
++    -- , Data.Judy.memoryUsed
++
+     -- * Freezing
+     , Data.Judy.freeze
+     , Data.Judy.unsafeFreeze
++
+     -- * Judy-storable types
+-    , JE(..)
++    , Data.Judy.JE (Data.Judy.toWord, Data.Judy.fromWord)
+ 
+   ) where
+ 

@@ -1,0 +1,85 @@
+diff --git a/.stylish-haskell.yaml b/.stylish-haskell.yaml
+new file mode 100644
+index 00000000..5e36f0c2
+--- /dev/null
++++ b/.stylish-haskell.yaml
+@@ -0,0 +1 @@
++steps: {}
+diff --git a/Data/SBV.hs b/Data/SBV.hs
+index c390c7aa..7c7087c3 100644
+--- a/Data/SBV.hs
++++ b/Data/SBV.hs
+@@ -214,7 +214,8 @@ module Data.SBV (
+ 
+   -- * Optimization
+   -- $optiIntro
+-  , OptimizeStyle(..), Penalty(..), Objective(..), minimize, maximize, assertSoft
++  , OptimizeStyle(..), Penalty(..), Objective(..)
++  , Metric (minimize, maximize), assertSoft
+   , ExtCW(..), GeneralizedCW(..)
+ 
+   -- * Model extraction
+diff --git a/sbv.cabal b/sbv.cabal
+index 16d33abc..7465f5e6 100644
+--- a/sbv.cabal
++++ b/sbv.cabal
+@@ -60,57 +60,8 @@ Library
+                   , Data.SBV.Tools.GenTest
+                   , Data.SBV.Tools.Polynomial
+                   , Data.SBV.Tools.STree
+-                  , Data.SBV.Examples.BitPrecise.BitTricks
+-                  , Data.SBV.Examples.BitPrecise.Legato
+-                  , Data.SBV.Examples.BitPrecise.MergeSort
+-                  , Data.SBV.Examples.BitPrecise.MultMask
+-                  , Data.SBV.Examples.BitPrecise.PrefixSum
+-                  , Data.SBV.Examples.CodeGeneration.AddSub
+-                  , Data.SBV.Examples.CodeGeneration.CRC_USB5
+-                  , Data.SBV.Examples.CodeGeneration.Fibonacci
+-                  , Data.SBV.Examples.CodeGeneration.GCD
+-                  , Data.SBV.Examples.CodeGeneration.PopulationCount
+-                  , Data.SBV.Examples.CodeGeneration.Uninterpreted
+-                  , Data.SBV.Examples.Crypto.AES
+-                  , Data.SBV.Examples.Crypto.RC4
+-                  , Data.SBV.Examples.Existentials.CRCPolynomial
+-                  , Data.SBV.Examples.Existentials.Diophantine
+-                  , Data.SBV.Examples.Misc.Enumerate
+-                  , Data.SBV.Examples.Misc.Floating
+-                  , Data.SBV.Examples.Misc.ModelExtract
+-                  , Data.SBV.Examples.Misc.Auxiliary
+-                  , Data.SBV.Examples.Misc.NoDiv0
+-                  , Data.SBV.Examples.Misc.Word4
+-                  , Data.SBV.Examples.Polynomials.Polynomials
+-                  , Data.SBV.Examples.Optimization.LinearOpt
+-                  , Data.SBV.Examples.Optimization.Production
+-                  , Data.SBV.Examples.Optimization.VM
+-                  , Data.SBV.Examples.Optimization.ExtField
+-                  , Data.SBV.Examples.Puzzles.Birthday
+-                  , Data.SBV.Examples.Puzzles.Coins
+-                  , Data.SBV.Examples.Puzzles.Counts
+-                  , Data.SBV.Examples.Puzzles.DogCatMouse
+-                  , Data.SBV.Examples.Puzzles.Euler185
+-                  , Data.SBV.Examples.Puzzles.Fish
+-                  , Data.SBV.Examples.Puzzles.MagicSquare
+-                  , Data.SBV.Examples.Puzzles.NQueens
+-                  , Data.SBV.Examples.Puzzles.SendMoreMoney
+-                  , Data.SBV.Examples.Puzzles.Sudoku
+-                  , Data.SBV.Examples.Puzzles.U2Bridge
+-                  , Data.SBV.Examples.Queries.AllSat
+-                  , Data.SBV.Examples.Queries.UnsatCore
+-                  , Data.SBV.Examples.Queries.FourFours
+-                  , Data.SBV.Examples.Queries.GuessNumber
+-                  , Data.SBV.Examples.Queries.CaseSplit
+-                  , Data.SBV.Examples.Queries.Enums
+-                  , Data.SBV.Examples.Queries.Interpolants
+-                  , Data.SBV.Examples.Uninterpreted.AUF
+-                  , Data.SBV.Examples.Uninterpreted.Deduce
+-                  , Data.SBV.Examples.Uninterpreted.Function
+-                  , Data.SBV.Examples.Uninterpreted.Shannon
+-                  , Data.SBV.Examples.Uninterpreted.Sort
+-                  , Data.SBV.Examples.Uninterpreted.UISortAllSat
+-  Other-modules   : Data.SBV.Core.AlgReals
++                  -- The modules below are normally not exposed
++                  , Data.SBV.Core.AlgReals
+                   , Data.SBV.Core.Concrete
+                   , Data.SBV.Core.Data
+                   , Data.SBV.Core.Kind
