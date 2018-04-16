@@ -1,14 +1,16 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module Main
-  ( main
+module EqSat.Tests
+  ( runTests
+  , tests
   ) where
 
 --------------------------------------------------------------------------------
 
-import           Tests.Integration                      (integrationTests)
-import           Tests.Unit                             (unitTests)
+import           EqSat.Tests.Integration                (integrationTests)
+import           EqSat.Tests.Property                   (propertyTests)
+import           EqSat.Tests.Unit                       (unitTests)
 
 import qualified Test.Tasty                             as Tasty
 import qualified Test.Tasty.Ingredients                 as Tasty
@@ -21,14 +23,19 @@ import qualified Test.Tasty.Runners                     as Tasty
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-main :: IO ()
-main = do
+runTests :: IO ()
+runTests = tests >>= Tasty.defaultMain
+
+-- | FIXME: doc
+tests :: IO Tasty.TestTree
+tests = do
   us <- unitTests
+  ps <- integrationTests
   is <- integrationTests
-  let tests = Tasty.testGroup "Tests"
-              [ Tasty.testGroup "Unit tests" us
-              , Tasty.testGroup "Integration tests" is
-              ]
-  Tasty.defaultMain tests
+  let ts = [ Tasty.testGroup "Unit tests"        us
+           , Tasty.testGroup "Property tests"    ps
+           , Tasty.testGroup "Integration tests" is
+           ]
+  pure (Tasty.testGroup "Tests" ts)
 
 --------------------------------------------------------------------------------

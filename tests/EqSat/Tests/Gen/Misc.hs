@@ -5,7 +5,7 @@
 
 --------------------------------------------------------------------------------
 
-module Tests.Gen.Misc
+module EqSat.Tests.Gen.Misc
   ( vector
   , mvector
   ) where

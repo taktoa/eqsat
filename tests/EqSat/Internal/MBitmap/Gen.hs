@@ -6,7 +6,7 @@
 
 --------------------------------------------------------------------------------
 
-module Tests.Gen.MBitmap
+module EqSat.Internal.MBitmap.Gen
   ( MBitmapAction
   , makeMBitmapAction
   , emptyMBitmapAction
@@ -24,10 +24,10 @@ module Tests.Gen.MBitmap
 import           EqSat.Internal.MBitmap  (MBitmap)
 import qualified EqSat.Internal.MBitmap  as MBitmap
 
+import qualified EqSat.Tests.Gen.Misc    as Gen
 import qualified Hedgehog                as HH
 import qualified Hedgehog.Gen            as Gen
 import qualified Hedgehog.Range          as Range
-import qualified Tests.Gen.Misc          as Gen
 
 import           Control.Monad.ST.Strict (ST, runST)
 

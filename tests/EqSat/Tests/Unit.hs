@@ -1,14 +1,11 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE BangPatterns        #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module Tests.Unit
+module EqSat.Tests.Unit
   ( unitTests
   ) where
 
@@ -36,17 +33,8 @@ import qualified EqSat.Term                             as Term
 import           EqSat.Variable                         (Variable)
 import qualified EqSat.Variable                         as Variable
 
-import           Hedgehog                               ((===))
-import qualified Hedgehog                               as HH
-import qualified Hedgehog.Gen                           as Gen
-import qualified Hedgehog.Range                         as Range
-
-import qualified Tests.Gen.MBitmap                      as Gen
-import qualified Tests.Gen.Misc                         as Gen
-
 import           Test.Tasty                             (TestName, TestTree)
 import qualified Test.Tasty                             as Tasty
-import qualified Test.Tasty.Hedgehog                    as Tasty.HH
 import qualified Test.Tasty.Ingredients                 as Tasty
 import qualified Test.Tasty.Ingredients.Basic           as Tasty
 import qualified Test.Tasty.Ingredients.ConsoleReporter as Tasty
@@ -71,44 +59,6 @@ import qualified Data.Vector                            as Vector
 import           Data.Proxy                             (Proxy (Proxy))
 
 import           Flow                                   ((.>), (|>))
-
---------------------------------------------------------------------------------
-
-propMBitmapSizeUnaffected :: HH.Property
-propMBitmapSizeUnaffected = do
-  HH.property $ do
-    action <- HH.forAll (Gen.genMBitmapActions Gen.genMBitmapAction)
-    (sizeBefore, sizeAfter) <- Gen.withMBitmap $ \bitmap -> do
-      !sx <- pure (MBitmap.size bitmap)
-      Gen.applyMBitmapAction action bitmap
-      !sy <- pure (MBitmap.size bitmap)
-      pure (sx, sy)
-    sizeBefore === sizeAfter
-
-propMBitmapSetWorks :: HH.Property
-propMBitmapSetWorks = do
-  HH.property $ do
-    index <- HH.forAll (Gen.int (Range.constant 0 maxBound))
-    let genMA = HH.forAll (Gen.genMBitmapActions Gen.genMutableMBitmapAction)
-    let genIA = HH.forAll (Gen.genMBitmapActions Gen.genImmutableMBitmapAction)
-    action1 <- genMA
-    action2 <- genIA
-    action3 <- genIA
-    (before, after) <- Gen.withMBitmap $ \bitmap -> do
-      let i = index `mod` MBitmap.size bitmap
-      Gen.applyMBitmapAction action1 bitmap
-      old <- MBitmap.get bitmap i
-      Gen.applyMBitmapAction action2 bitmap
-      MBitmap.set bitmap i (not old)
-      Gen.applyMBitmapAction action3 bitmap
-      new <- MBitmap.get bitmap i
-      pure (old, new)
-    not before === after
-
---------------------------------------------------------------------------------
-
-prop :: TestName -> HH.Property -> TestTree
-prop = Tasty.HH.testProperty
 
 --------------------------------------------------------------------------------
 
@@ -163,9 +113,7 @@ test_EqSat_Internal_MHashMap
 -- | Unit tests for "EqSat.Internal.MBitmap".
 test_EqSat_Internal_MBitmap :: IO TestTree
 test_EqSat_Internal_MBitmap
-  = [ prop "propMBitmapSizeUnaffected" propMBitmapSizeUnaffected
-    , prop "propMBitmapSetWorks"       propMBitmapSetWorks
-      -- FIXME: write more unit tests
+  = [ -- FIXME: write unit tests
     ] |> Tasty.testGroup "EqSat.Internal.MBitmap" |> pure
 
 -- | Unit tests for "EqSat.Internal.MGraph".

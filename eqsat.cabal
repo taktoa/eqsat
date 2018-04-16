@@ -103,11 +103,13 @@ library
 test-suite tests
     type:                 exitcode-stdio-1.0
     hs-source-dirs:       tests
-    main-is:              Tests.hs
-    other-modules:        Tests.Unit
-                        , Tests.Integration
-                        , Tests.Gen.MBitmap
-                        , Tests.Gen.Misc
+    main-is:              Main.hs
+    other-modules:        EqSat.Tests
+                        , EqSat.Tests.Unit
+                        , EqSat.Tests.Property
+                        , EqSat.Tests.Integration
+                        , EqSat.Tests.Gen.Misc
+                        , EqSat.Internal.MBitmap.Gen
     build-depends:        eqsat
                         , base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3

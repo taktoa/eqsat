@@ -1,7 +1,7 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module Tests.Integration
+module EqSat.Tests.Integration
   ( integrationTests
   ) where
 
