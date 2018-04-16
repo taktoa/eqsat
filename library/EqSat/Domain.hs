@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -17,9 +18,9 @@ import qualified Data.SBV as SBV
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-class (Num d, SBV.SymWord d, SBV.Metric d) => Domain d
+class (Num d, SBV.SymWord d, SBV.Metric (SBV.SBV d)) => Domain d
 
 -- | FIXME: doc
-instance (Num d, SBV.SymWord d, SBV.Metric d) => Domain d
+instance (Num d, SBV.SymWord d, SBV.Metric (SBV.SBV d)) => Domain d
 
 --------------------------------------------------------------------------------

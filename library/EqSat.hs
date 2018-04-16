@@ -151,7 +151,7 @@ quotientSomeGraph vf ef
 -- is a rooted graph.
 data PEG g node
   = UnsafeMkPEG
-    !(Graph g Int (Unique, node))
+    !(Graph g Int node)
     !(Vertex g)
   deriving ()
 
@@ -189,7 +189,7 @@ makePEG' = fmap absurd .> makePEG
 pegRoot :: PEG g node -> Vertex g
 pegRoot (UnsafeMkPEG _ root) = root
 
-pegGraph :: PEG g node -> Graph g Int (Unique, node)
+pegGraph :: PEG g node -> Graph g Int node
 pegGraph (UnsafeMkPEG graph _) = graph
 
 pegRootNode :: PEG g node -> node
