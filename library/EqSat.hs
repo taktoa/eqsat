@@ -70,7 +70,7 @@ import qualified Data.Map.Strict           as Map
 import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 
-import           Data.Word                 (Word32)
+import           Data.Word                 (Word16, Word32)
 
 import           Data.Unique               (Unique)
 import qualified Data.Unique               as Unique
@@ -126,7 +126,7 @@ quotientGraph
   -- ^ FIXME: doc
   -> Graph g e v
   -- ^ FIXME: doc
-quotientGraph = undefined
+quotientGraph vf ef = undefined
 
 -- | FIXME: doc
 quotientSomeGraph
@@ -151,7 +151,7 @@ quotientSomeGraph vf ef
 -- is a rooted graph.
 data PEG g node
   = UnsafeMkPEG
-    !(Graph g Int node)
+    !(Graph g Int (Unique, node))
     !(Vertex g)
   deriving ()
 
@@ -189,11 +189,14 @@ makePEG' = fmap absurd .> makePEG
 pegRoot :: PEG g node -> Vertex g
 pegRoot (UnsafeMkPEG _ root) = root
 
-pegGraph :: PEG g node -> Graph g Int node
+pegGraph :: PEG g node -> Graph g Int (Unique, node)
 pegGraph (UnsafeMkPEG graph _) = graph
 
+pegAtVertex :: PEG g node -> Vertex g -> node
+pegAtVertex peg vertex = snd (Graph.atVertex vertex (pegGraph peg))
+
 pegRootNode :: PEG g node -> node
-pegRootNode peg = Graph.atVertex (pegRoot peg) (pegGraph peg)
+pegRootNode peg = pegAtVertex peg (pegRoot peg)
 
 -- Given a `PEG`, return a `Vector` of `PEG`s, each representing the subgraph
 -- rooted at each child of the root node of the given `PEG`.
@@ -209,12 +212,13 @@ pegChildren = undefined -- FIXME
 -- Convert a `PEG` into a term by starting at the root node and recursively
 -- expanding nodes. If there is a cycle in the PEG, this will not terminate.
 pegToTerm :: PEG g node -> ClosedTerm node
-pegToTerm peg = MkNodeTerm (Graph.atVertex (pegRoot peg) (pegGraph peg))
+pegToTerm peg = MkNodeTerm
+                (pegRootNode peg)
                 (Vector.map pegToTerm (pegChildren peg))
 
 -- Modify a PEG, returning `Nothing` if the modification you made to the
 -- underlying `Graph` made the PEG no longer valid (e.g.: you added two edges
--- out of the same node with the edge labels).
+-- out of the same node with the same edge labels).
 modifyPEG
   :: (Monad m)
   => PEG g node
@@ -291,10 +295,9 @@ epegAddEquivalence
 epegAddEquivalence (a, b) epeg
   = if epegEquivalent epeg (a, b)
     then Nothing
-    else Just (MkEPEG { epegPEG        = epegPEG epeg
-                      , epegEqRelation = epegEqRelation epeg
-                                         |> Partition.joinElems a b
-                      })
+    else Just (epeg { epegEqRelation = epegEqRelation epeg
+                                       |> Partition.joinElems a b
+                    })
 
 -- | Convert a PEG into the trivial EPEG that holds every node to be
 --   semantically distinct.
@@ -343,7 +346,7 @@ epegClasses = undefined
 
 -- | The type of global performance heuristics.
 type PerformanceHeuristic domain node
-  = forall g. EPEG g (node, SBV domain) -> Symbolic (SBV domain)
+  = (forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
 
 -- | Optimize the given 'PerformanceHeuristic' on the given 'EPEG', possibly
 --   yielding a 'SomePEG' representing the
@@ -367,12 +370,14 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
     predicates <- mconcat . Vector.toList <$> do
       Vector.forM classes $ \(i, cls) -> do
         let n = Vector.length cls
-        var <- SBV.sWord32 (show i)
+        when (toInteger n > toInteger (maxBound :: Word16)) $ do
+          error "Size of equivalence class is too large!"
+        var <- SBV.sWord16 (show i)
         -- SBV.constrain (0 .<= var)
         SBV.constrain (var .< fromIntegral n)
-        let vec = Vector.fromList (zip [0..] (Vector.toList cls))
-        Vector.forM vec $ \(i, vertex) -> do
-          pure (vertex, SBV.oneIf (var .== fromIntegral i))
+        let vec = Vector.fromList (zip ([0..] :: [Int]) (Vector.toList cls))
+        Vector.forM vec $ \(j, vertex) -> do
+          pure (vertex, var .== fromIntegral j)
     let predMap = HM.fromList (Vector.toList predicates)
     peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
       case HM.lookup vertex predMap of
