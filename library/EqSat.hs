@@ -81,7 +81,7 @@ import qualified Data.Vector               as Vector
 import           Data.Void                 (Void, absurd)
 
 import           Data.SBV
-                 (SInteger, Symbolic, (.<), (.<=), (.==))
+                 (SBV, SInteger, Symbolic, (.<), (.<=), (.==))
 import qualified Data.SBV                  as SBV
 import qualified Data.SBV.Internals        as SBV.Internals
 
@@ -104,6 +104,8 @@ import qualified EqSat.Term                as Term
 
 import           EqSat.Equation            (Equation)
 import qualified EqSat.Equation            as Equation
+
+import           EqSat.Domain              (Domain)
 
 import           EqSat.IsExpression
                  (IsExpression (exprToTerm, termToExpr))
@@ -149,7 +151,7 @@ quotientSomeGraph vf ef
 -- is a rooted graph.
 data PEG g node
   = UnsafeMkPEG
-    !(Graph g Int node)
+    !(Graph g Int (Unique, node))
     !(Vertex g)
   deriving ()
 
@@ -187,7 +189,7 @@ makePEG' = fmap absurd .> makePEG
 pegRoot :: PEG g node -> Vertex g
 pegRoot (UnsafeMkPEG _ root) = root
 
-pegGraph :: PEG g node -> Graph g Int node
+pegGraph :: PEG g node -> Graph g Int (Unique, node)
 pegGraph (UnsafeMkPEG graph _) = graph
 
 pegRootNode :: PEG g node -> node
@@ -340,16 +342,16 @@ epegClasses = undefined
 --------------------------------------------------------------------------------
 
 -- | The type of global performance heuristics.
-type PerformanceHeuristic node
-  = forall g. EPEG g (node, SBV.SBool) -> Symbolic SInteger
+type PerformanceHeuristic domain node
+  = forall g. EPEG g (node, SBV domain) -> Symbolic (SBV domain)
 
 -- | Optimize the given 'PerformanceHeuristic' on the given 'EPEG', possibly
 --   yielding a 'SomePEG' representing the
 runPerformanceHeuristic
-  :: forall g node m.
-     (MonadIO m)
+  :: forall node domain m g.
+     (MonadIO m, Domain domain)
   => EPEG g node
-  -> PerformanceHeuristic node
+  -> PerformanceHeuristic domain node
   -> m (Maybe (SomePEG node))
 runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
   let classesSet :: Set (Set (Vertex g))
@@ -370,7 +372,7 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
         SBV.constrain (var .< fromIntegral n)
         let vec = Vector.fromList (zip [0..] (Vector.toList cls))
         Vector.forM vec $ \(i, vertex) -> do
-          pure (vertex, var .== fromIntegral i)
+          pure (vertex, SBV.oneIf (var .== fromIntegral i))
     let predMap = HM.fromList (Vector.toList predicates)
     peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
       case HM.lookup vertex predMap of
@@ -468,7 +470,8 @@ applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
 -- Given a performance heuristic and an EPEG, return the PEG subgraph that
 -- maximizes the heuristic.
 selectBest
-  :: PerformanceHeuristic node
+  :: (Domain domain)
+  => PerformanceHeuristic domain node
   -> EPEG g node
   -> PEG g node
 selectBest heuristic epeg = undefined
@@ -487,9 +490,9 @@ saturateStep eqs epeg = do
 
 -- | The internal version of equality saturation.
 saturate
-  :: (Monad m)
+  :: (Monad m, Domain domain)
   => Set (Equation node Variable)
-  -> PerformanceHeuristic node
+  -> PerformanceHeuristic domain node
   -> EPEG g node
   -> (EPEG g node -> m Bool)
   -> (PEG g node -> m (Maybe a))
@@ -509,11 +512,11 @@ saturate eqs heuristic initial timer cb = do
 
 -- | The public interface of equality saturation.
 equalitySaturation
-  :: forall node expr m a.
-     (IsExpression node expr, MonadError SomeException m)
+  :: forall node domain expr m a.
+     (IsExpression node expr, MonadError SomeException m, Domain domain)
   => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
-  -> PerformanceHeuristic node
+  -> PerformanceHeuristic domain node
   -- ^ The performance heuristic to optimize.
   -> expr
   -- ^ The code whose performance will be optimized.
