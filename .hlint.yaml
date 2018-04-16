@@ -231,7 +231,6 @@
     - {name: [Hedgehog],                       as: HH}
     - {name: [Hedgehog.Gen],                   as: HH.Gen}
     - {name: [Hedgehog.Range],                 as: HH.Range}
-    - {name: [Hedgehog.Range],                 as: HH.Range}
     - {name: [Hedgehog.Internal.Config],       as: HH.Internal.Config}
     - {name: [Hedgehog.Internal.Discovery],    as: HH.Internal.Discovery}
     - {name: [Hedgehog.Internal.Distributive], as: HH.Internal.Distributive}
