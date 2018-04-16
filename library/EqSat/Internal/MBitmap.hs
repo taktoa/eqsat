@@ -10,15 +10,20 @@ module EqSat.Internal.MBitmap
   , fill
   , isAllTrue
   , isAllFalse
+  , freezeToUVector
+  , thawFromUVector
   ) where
 
 --------------------------------------------------------------------------------
 
-import           Control.Monad.Primitive (PrimMonad (PrimState), stToPrim)
+import           Control.Monad.Primitive     (PrimMonad (PrimState), stToPrim)
 
-import qualified Foundation              as F
-import qualified Foundation.Array        as F.Array
-import qualified Foundation.Collection   as F.Collection
+import qualified Foundation                  as F
+import qualified Foundation.Array            as F.Array
+import qualified Foundation.Collection       as F.Collection
+
+import qualified Data.Vector.Unboxed         as UVector
+import qualified Data.Vector.Unboxed.Mutable as UMVector
 
 --------------------------------------------------------------------------------
 
@@ -125,5 +130,41 @@ isAllFalse bitmap = stToPrim $ do
              else do b <- F.Collection.mutUnsafeRead bm (F.Offset i)
                      (b ||) <$> go (i - 1)
   not <$> go (n - 1)
+
+-- | FIXME: doc
+freezeToUVector
+  :: (PrimMonad m)
+  => MBitmap (PrimState m)
+  -- ^ FIXME: doc
+  -> m (UVector.Vector Bool)
+  -- ^ FIXME: doc
+freezeToUVector bitmap = stToPrim $ do
+  let (UnsafeMkMBitmap n bm) = bitmap
+  result <- UMVector.unsafeNew n
+  let go i = if i < 0
+             then pure ()
+             else do b <- F.Collection.mutUnsafeRead bm (F.Offset i)
+                     UMVector.unsafeWrite result i b
+                     go (i - 1)
+  go (n - 1)
+  UVector.unsafeFreeze result
+
+-- | FIXME: doc
+thawFromUVector
+  :: (PrimMonad m)
+  => UVector.Vector Bool
+  -- ^ FIXME: doc
+  -> m (MBitmap (PrimState m))
+  -- ^ FIXME: doc
+thawFromUVector vector = stToPrim $ do
+  let n = UVector.length vector
+  bm <- F.Collection.mutNew (fromIntegral n)
+  let go i = if i < 0
+             then pure ()
+             else do b <- UVector.unsafeIndexM vector i
+                     F.Collection.mutUnsafeWrite bm (F.Offset i) b
+                     go (i - 1)
+  go (n - 1)
+  pure $ UnsafeMkMBitmap n bm
 
 --------------------------------------------------------------------------------

@@ -29,6 +29,7 @@ import qualified EqSat.Term                             as Term
 import           EqSat.Variable                         (Variable)
 import qualified EqSat.Variable                         as Variable
 
+import           Hedgehog                               ((===))
 import qualified Hedgehog                               as HH
 import qualified Hedgehog.Gen                           as HH.Gen
 import qualified Hedgehog.Range                         as HH.Range
