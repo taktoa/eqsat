@@ -26,7 +26,7 @@ module EqSat.Variable
 --------------------------------------------------------------------------------
 
 import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           Data.Bool              (Bool (False, True), (&&))
+import           Data.Bool              (Bool, (&&))
 import           Data.Eq                (Eq ((==)))
 import           Data.Hashable          (Hashable (hashWithSalt))
 import           Data.Int               (Int)
@@ -36,7 +36,7 @@ import           Data.Maybe             (Maybe (Just, Nothing))
 import           Data.Ord               (Ord (compare), Ordering)
 import           Data.Text              (Text)
 import           Data.Unique            (Unique, hashUnique, newUnique)
-import           Flow                   ((.>), (|>))
+
 import           GHC.Generics           (Generic)
 import           Numeric.Natural        (Natural)
 
@@ -45,9 +45,9 @@ import           Numeric.Natural        (Natural)
 -- | FIXME: doc
 data Variable
   = MkVariable
-    { variableID   :: {-# UNPACK #-} !Unique
-    , variableName ::                !(Maybe Text)
-    , variableLoc  ::                !(Maybe Loc)
+    { variableID   :: !Unique
+    , variableName :: !(Maybe Text)
+    , variableLoc  :: !(Maybe Loc)
     }
   deriving (Generic)
 
@@ -80,8 +80,8 @@ fresh
   -> m Variable
   -- ^ FIXME: doc
 fresh name loc = liftIO $ do
-  id <- newUnique
-  pure (MkVariable id name loc)
+  ident <- newUnique
+  pure (MkVariable ident name loc)
 
 -- | FIXME: doc
 freshSimple
@@ -138,7 +138,7 @@ setID
   -- ^ FIXME: doc
   -> Variable
   -- ^ FIXME: doc
-setID id var = var { variableID = id }
+setID ident var = var { variableID = ident }
 
 -- | FIXME: doc
 getName

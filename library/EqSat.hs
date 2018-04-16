@@ -47,10 +47,13 @@ import qualified Data.HashSet              as HS
 
 import qualified Data.Graph.Immutable      as Graph
 import qualified Data.Graph.Mutable        as MGraph
-import           Data.Graph.Types          (Graph, MGraph, Vertex)
+import           Data.Graph.Types          (Graph, MGraph, SomeGraph, Vertex)
 import qualified Data.Graph.Types          as Graph
 import qualified Data.Graph.Types          as MGraph
 import qualified Data.Graph.Types.Internal as Graph.Internal
+
+import           Data.Partition            (Partition)
+import qualified Data.Partition            as Partition
 
 import           Data.STRef                (STRef)
 import qualified Data.STRef                as STRef
@@ -68,6 +71,9 @@ import           Data.Set                  (Set)
 import qualified Data.Set                  as Set
 
 import           Data.Word                 (Word32)
+
+import           Data.Unique               (Unique)
+import qualified Data.Unique               as Unique
 
 import           Data.Vector               (Vector)
 import qualified Data.Vector               as Vector
@@ -101,6 +107,38 @@ import qualified EqSat.Equation            as Equation
 
 import           EqSat.IsExpression
                  (IsExpression (exprToTerm, termToExpr))
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+type Edge g = (Vertex g, Vertex g)
+
+-- | FIXME: doc
+quotientGraph
+  :: (Eq v, Hashable v)
+  => ((Vertex g, v) -> (Vertex g, v))
+  -- ^ FIXME: doc
+  -> ((Edge g, e) -> (Edge g, e))
+  -- ^ FIXME: doc
+  -> Graph g e v
+  -- ^ FIXME: doc
+  -> Graph g e v
+  -- ^ FIXME: doc
+quotientGraph = undefined
+
+-- | FIXME: doc
+quotientSomeGraph
+  :: (Eq v, Hashable v)
+  => (forall g. (Vertex g, v) -> (Vertex g, v))
+  -- ^ FIXME: doc
+  -> (forall g. (Edge g, e) -> (Edge g, e))
+  -- ^ FIXME: doc
+  -> SomeGraph e v
+  -- ^ FIXME: doc
+  -> SomeGraph e v
+  -- ^ FIXME: doc
+quotientSomeGraph vf ef
+  = Graph.mapSome (quotientGraph vf ef)
 
 --------------------------------------------------------------------------------
 
@@ -208,8 +246,7 @@ traversePEG = undefined
 data EPEG g node
   = MkEPEG
     { epegPEG        :: !(PEG g node)
-    , epegEqRelation :: !Int -- FIXME
-    -- ^ FIXME: replace with union-find or something
+    , epegEqRelation :: !(Partition (Vertex g))
     }
   deriving ()
 
@@ -237,50 +274,77 @@ epegEquivalent
   -- ^ FIXME: doc
   -> Bool
   -- ^ FIXME: doc
-epegEquivalent = undefined
+epegEquivalent epeg (a, b)
+  = let p = epegEqRelation epeg
+    in Partition.rep p a == Partition.rep p b
 
 -- | Given a pair of vertices in an 'EPEG', combine their equivalence classes.
 epegAddEquivalence
   :: (Vertex g, Vertex g)
-  -> EPEG g node -> Maybe (EPEG g node)
+  -- ^ FIXME: doc
+  -> EPEG g node
+  -- ^ FIXME: doc
+  -> Maybe (EPEG g node)
+  -- ^ FIXME: doc
 epegAddEquivalence (a, b) epeg
   = if epegEquivalent epeg (a, b)
     then Nothing
     else Just (MkEPEG { epegPEG        = epegPEG epeg
-                      , epegEqRelation = undefined (epegEqRelation epeg)
+                      , epegEqRelation = epegEqRelation epeg
+                                         |> Partition.joinElems a b
                       })
 
--- Convert a PEG into the trivial EPEG that holds every node to be semantically
--- distinct.
-pegToEPEG :: PEG g node -> EPEG g node
-pegToEPEG peg = MkEPEG peg undefined -- FIXME
+-- | Convert a PEG into the trivial EPEG that holds every node to be
+--   semantically distinct.
+pegToEPEG
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> EPEG g node
+  -- ^ FIXME: doc
+pegToEPEG peg = MkEPEG peg Partition.discrete
 
-epegChildren :: EPEG g node -> Vector (EPEG g node)
+-- | FIXME: doc
+epegChildren
+  :: EPEG g node
+  -- ^ FIXME: doc
+  -> Vector (EPEG g node)
+  -- ^ FIXME: doc
 epegChildren (MkEPEG peg eq) = (\p -> MkEPEG p eq) <$> pegChildren peg
 
-epegRootNode :: EPEG g node -> node
+-- | FIXME: doc
+epegRootNode
+  :: EPEG g node
+  -- ^ FIXME: doc
+  -> node
+  -- ^ FIXME: doc
 epegRootNode (MkEPEG peg _) = pegRootNode peg
 
-epegGetClass :: EPEG g node -> Vertex g -> Maybe (Set (Vertex g))
+-- | FIXME: doc
+epegGetClass
+  :: EPEG g node
+  -- ^ FIXME: doc
+  -> Vertex g
+  -- ^ FIXME: doc
+  -> Maybe (Set (Vertex g))
+  -- ^ FIXME: doc
 epegGetClass = undefined
 
-epegClasses :: EPEG g node -> Set (Set (Vertex g))
+-- | FIXME: doc
+epegClasses
+  :: EPEG g node
+  -- ^ FIXME: doc
+  -> Set (Set (Vertex g))
+  -- ^ FIXME: doc
 epegClasses = undefined
 
 --------------------------------------------------------------------------------
 
--- The type of global performance heuristics.
---
--- In a real implementation of equality saturation, this type will not be
--- defined this way, as the efficiency of equality saturation can be improved
--- if the pseudoboolean integer solver can introspect on the way in which the
--- performance heuristic is defined, rather than treating it as an oracle.
---
--- If we were using the `sbv` library, for example, it would be reasonable
--- for `PerformanceHeuristic` to be defined as `EPEG -> Symbolic SInteger`.
+-- | The type of global performance heuristics.
 type PerformanceHeuristic node
   = forall g. EPEG g (node, SBV.SBool) -> Symbolic SInteger
 
+-- | Optimize the given 'PerformanceHeuristic' on the given 'EPEG', possibly
+--   yielding a 'SomePEG' representing the
 runPerformanceHeuristic
   :: forall g node m.
      (MonadIO m)

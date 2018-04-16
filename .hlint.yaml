@@ -366,6 +366,9 @@
     # `flow` (COMPLETE)
     - {name: [Flow], as: [Flow]}
 
+    # `data-partition` (COMPLETE)
+    - {name: [Data.Partition], as: [Partition]}
+
     # `eqsat` (COMPLETE)
     - {name: [EqSat],                        as: EqSat}
     - {name: [EqSat.Variable],               as: [EqSat, Variable]}
