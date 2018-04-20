@@ -12,6 +12,7 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
 
 --------------------------------------------------------------------------------
 
@@ -23,7 +24,8 @@ module EqSat
 --------------------------------------------------------------------------------
 
 import           Control.Exception
-                 (Exception, SomeException, catch, throw, throwIO)
+                 (AssertionFailed, Exception, SomeException, assert, catch,
+                 throw, throwIO)
 
 import           Control.Applicative       (empty)
 
@@ -80,6 +82,8 @@ import qualified Data.Vector               as Vector
 
 import           Data.Void                 (Void, absurd)
 
+import           Data.Proxy                (Proxy (Proxy))
+
 import           Data.SBV
                  (SBV, SInteger, Symbolic, (.<), (.<=), (.==))
 import qualified Data.SBV                  as SBV
@@ -109,6 +113,83 @@ import           EqSat.Domain              (Domain)
 
 import           EqSat.IsExpression
                  (IsExpression (exprToTerm, termToExpr))
+
+--------------------------------------------------------------------------------
+
+-- | A 'Term', along with its 'Type' and the 'Type' of all its free variables.
+data TypedTerm var node expr
+  = UnsafeMkTypedTerm
+    { _typedTermUnderlyingTerm :: Term node var
+    , _typedTermOverallType    :: Type expr
+    , _typedTermVarType        :: var -> Maybe (Type expr)
+    }
+  deriving ()
+
+-- | Safely create a 'TypedTerm'.
+makeTypedTerm
+  :: (Ord var, TypeSystem node expr)
+  => Term node var
+  -- ^ The underlying 'Term' of the 'TypedTerm' we are going to make.
+  -> Type expr
+  -- ^ The overall 'Type' of the given 'Term'.
+  -> (var -> Maybe (Type expr))
+  -- ^ The most general inferred type for each of the variables in the 'Term'.
+  --   The function must return 'Just' if the given variable was one of the
+  --   free variables of the term, or else an 'AssertionFailed' exception
+  --   will be thrown before the 'TypedTerm' is returned by this function.
+  -> TypedTerm var node expr
+  -- ^ A typed term.
+makeTypedTerm term overallType varType
+  = let free  = Term.freeVars term
+        tterm = UnsafeMkTypedTerm
+                { _typedTermUnderlyingTerm = term
+                , _typedTermOverallType    = overallType
+                , _typedTermVarType        = \var -> if var `Set.member` free
+                                                     then varType var
+                                                     else Nothing
+                }
+    in assert (all (varType .> isJust) free) tterm
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+class (IsExpression node expr) => TypeSystem node expr where
+  -- | A type whose values represent the types of expressions.
+  type Type expr
+
+  -- | Infer the type of an open term.
+  --
+  --   Takes as input a proxy value (e.g.: 'Proxy') to avoid use of
+  --   @-XAllowAmbiguousTypes@ as well as an open 'Term' with variables
+  --   in an arbitrary @var@ type.
+  --
+  --   Returns a @'Maybe' ('TypedTerm' var node expr)@.
+  --   'Nothing' should only be returned in case of a failure in type inference.
+  --
+  --   The 'Ord' and 'Hashable' instances are there so that you can efficiently
+  --   create a 'TypedTerm' with a 'Map' or a 'HashMap' for the types of the
+  --   variables.
+  inferType
+    :: (Ord var, Hashable var)
+    => proxy expr
+    -> Term node var
+    -> Maybe (TypedTerm var node expr)
+
+  -- | Return 'True' if the two given 'Type's are equivalent in your type
+  --   system, and return 'False' otherwise.
+  --
+  --   This function takes as input a proxy value (e.g.: 'Proxy') to avoid use
+  --   of @-XAllowAmbiguousTypes@.
+  --
+  --   Laws:
+  --
+  --   1. This should be a total function.
+  --   2. This should be an equivalence relation.
+  equivalentType
+    :: proxy expr
+    -> Type expr
+    -> Type expr
+    -> Bool
 
 --------------------------------------------------------------------------------
 
@@ -148,11 +229,17 @@ quotientSomeGraph vf ef
 --   representing a referentially transparent AST with sharing.
 data PEG g node
   = UnsafeMkPEG
-    !(Graph g Int (Unique, node))
-    -- ^ The 'Graph' underlying the 'PEG'.
-    !(Vertex g)
-    -- ^ The root node of the 'PEG'.
+    { _pegGraph :: !(Graph g Int Unique)
+      -- ^ The 'Graph' underlying the 'PEG'.
+    , _pegNodes :: !(Vertex g -> node)
+      -- ^ FIXME: doc
+    , _pegRoot  :: !(Vertex g)
+      -- ^ The root node of the 'PEG'.
+    }
   deriving ()
+
+instance Eq (PEG g node) where
+
 
 -- | Smart constructor for PEGs.
 --
@@ -183,15 +270,25 @@ pegRoot
   -- ^ FIXME: doc
   -> Vertex g
   -- ^ FIXME: doc
-pegRoot (UnsafeMkPEG _ root) = root
+pegRoot (UnsafeMkPEG _ _ root) = root
+
+-- | FIXME: doc
+pegNodes
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> Vertex g
+  -- ^ FIXME: doc
+  -> node
+  -- ^ FIXME: doc
+pegNodes (UnsafeMkPEG _ f _) = f
 
 -- | FIXME: doc
 pegGraph
   :: PEG g node
   -- ^ FIXME: doc
-  -> Graph g Int (Unique, node)
+  -> Graph g Int Unique
   -- ^ FIXME: doc
-pegGraph (UnsafeMkPEG graph _) = graph
+pegGraph (UnsafeMkPEG graph _ _) = graph
 
 -- | FIXME: doc
 pegAtVertex
@@ -201,7 +298,8 @@ pegAtVertex
   -- ^ FIXME: doc
   -> node
   -- ^ FIXME: doc
-pegAtVertex peg vertex = snd (Graph.atVertex vertex (pegGraph peg))
+pegAtVertex = pegNodes
+-- pegAtVertex peg vertex = snd (Graph.atVertex vertex (pegGraph peg))
 
 -- | FIXME: doc
 pegRootNode
@@ -397,8 +495,21 @@ withSomeEPEG (MkSomeEPEG epeg) f = f epeg
 --------------------------------------------------------------------------------
 
 -- | The type of global symbolic performance heuristics.
-type GlobalSymbolicPerformanceHeuristic domain node
-  = (forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
+newtype GlobalSymbolicPerformanceHeuristic domain node
+  = MkGlobalSymbolicPerformanceHeuristic
+    (forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
+  deriving ()
+
+-- | FIXME: doc
+applyGlobalSymbolicPerformanceHeuristic
+  :: GlobalSymbolicPerformanceHeuristic domain node
+  -- ^ FIXME: doc
+  -> EPEG g (node, SBV Bool)
+  -- ^ FIXME: doc
+  -> Symbolic (SBV domain)
+  -- ^ FIXME: doc
+applyGlobalSymbolicPerformanceHeuristic
+  = (\case (MkGlobalSymbolicPerformanceHeuristic f) -> f)
 
 -- | Optimize the given 'GlobalSymbolicPerformanceHeuristic' on the
 --   given 'EPEG' via pseudo-boolean integer programming using @sbv@ / @Z3@'s
@@ -442,7 +553,8 @@ runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
       case HM.lookup vertex predMap of
         Just b  -> pure (node, b)
         Nothing -> error "this should never happen"
-    goal <- heuristic (MkEPEG peg (epegEqRelation epeg))
+    goal <- applyGlobalSymbolicPerformanceHeuristic heuristic
+            $ MkEPEG peg (epegEqRelation epeg)
     SBV.maximize "heuristic" goal
 
   (SBV.LexicographicResult result) <- pure optimizeResult
@@ -486,13 +598,19 @@ runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 class Heuristic heuristic where
+  -- | FIXME: doc
   runHeuristic
     :: (MonadIO m)
     => EPEG g node
+    -- ^ FIXME: doc
     -> heuristic node
+    -- ^ FIXME: doc
     -> m (Maybe (SomePEG node))
+    -- ^ FIXME: doc
 
+-- | FIXME: doc
 instance (Domain d) => Heuristic (GlobalSymbolicPerformanceHeuristic d) where
   runHeuristic = runGlobalSymbolicPerformanceHeuristic
 
