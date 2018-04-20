@@ -78,9 +78,11 @@ import qualified Control.Monad.Amb                as AmbT
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 guardM :: (MonadPlus m) => m Bool -> m ()
 guardM action = action >>= guard
 
+-- | FIXME: doc
 isConsecutive :: Graph g e Int -> Bool
 isConsecutive graph = runST $ do
   let graphSize = Graph.sizeInt (Graph.size graph)
@@ -89,6 +91,7 @@ isConsecutive graph = runST $ do
     $ \v -> MBitmap.set bitmap v True
   MBitmap.isAllTrue bitmap
 
+-- | FIXME: doc
 graphToAdjacencyMatrix
   :: Graph g e Int -> Matrix 'Dense Float CFloat
 graphToAdjacencyMatrix

@@ -267,15 +267,17 @@ class IsMatrix (p :: Packing) where
 
 -- | FIXME: doc
 instance IsMatrix 'Dense where
-  zeroMatrix       = uncurry Eigen.Matrix.zero
-  thawMatrix       = Eigen.Matrix.thaw
-  unsafeThawMatrix = Eigen.Matrix.unsafeThaw
-  shapeMatrix      = Eigen.Matrix.dims
-  addMatrix        = (+)
-  subMatrix        = (-)
-  mulMatrix        = (*)
-  encodeMatrix     = Eigen.Matrix.encode
-  decodeMatrix     = Eigen.Matrix.decode
+  zeroMatrix        = uncurry Eigen.Matrix.zero
+  thawMatrix        = Eigen.Matrix.thaw
+  unsafeThawMatrix  = Eigen.Matrix.unsafeThaw
+  shapeMatrix       = Eigen.Matrix.dims
+  addMatrix         = (+)
+  subMatrix         = (-)
+  mulMatrix         = (*)
+  encodeMatrix      = Eigen.Matrix.encode
+  decodeMatrix      = Eigen.Matrix.decode
+  coeffMatrix       = undefined
+  unsafeCoeffMatrix = undefined
 
 
 -- | FIXME: doc
@@ -295,6 +297,8 @@ instance IsMatrix 'Sparse where
   mulMatrix    = (*)
   encodeMatrix = Eigen.SparseMatrix.encode
   decodeMatrix = Eigen.SparseMatrix.decode
+  coeffMatrix       = undefined
+  unsafeCoeffMatrix = undefined
 
 --------------------------------------------------------------------------------
 
@@ -613,6 +617,7 @@ uncompressSparseMutableMatrix matrix = do
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 invertSquareMatrix
   :: (Eigen.Elem a b)
   => Matrix 'Dense a b
