@@ -27,128 +27,194 @@ import           Control.Exception
                  (AssertionFailed, Exception, SomeException, assert, catch,
                  throw, throwIO)
 
-import           Control.Applicative       (empty)
+import           Control.Applicative          (empty)
 
 import           Control.Monad
 
 import           Control.Monad.Primitive
-import           Control.Monad.ST          (ST, runST)
+import           Control.Monad.ST             (ST, runST)
 
-import           Control.Monad.IO.Class    (MonadIO (liftIO))
-import           Control.Monad.Trans.Class (MonadTrans (lift))
-import qualified Control.Monad.Trans.Class as MonadTrans
-import           Control.Monad.Trans.Maybe (MaybeT (MaybeT))
-import qualified Control.Monad.Trans.Maybe as MaybeT
+import           Control.Monad.IO.Class       (MonadIO (liftIO))
+import           Control.Monad.Trans.Class    (MonadTrans (lift))
+import qualified Control.Monad.Trans.Class    as MonadTrans
+import           Control.Monad.Trans.Maybe    (MaybeT (MaybeT))
+import qualified Control.Monad.Trans.Maybe    as MaybeT
 
-import           Control.Monad.Except      (MonadError (throwError))
+import           Control.Monad.Except         (MonadError (throwError))
 
-import           Data.Hashable             (Hashable)
+import           Data.Hashable                (Hashable)
 
-import qualified Data.HashMap.Strict       as HM
-import qualified Data.HashSet              as HS
+import qualified Data.HashMap.Strict          as HM
+import qualified Data.HashSet                 as HS
 
-import qualified Data.Graph.Immutable      as Graph
-import qualified Data.Graph.Mutable        as MGraph
-import           Data.Graph.Types          (Graph, MGraph, SomeGraph, Vertex)
-import qualified Data.Graph.Types          as Graph
-import qualified Data.Graph.Types          as MGraph
-import qualified Data.Graph.Types.Internal as Graph.Internal
+import qualified Data.Graph.Immutable         as Graph
+import qualified Data.Graph.Mutable           as MGraph
+import           Data.Graph.Types             (Graph, MGraph, SomeGraph, Vertex)
+import qualified Data.Graph.Types             as Graph
+import qualified Data.Graph.Types             as MGraph
+import qualified Data.Graph.Types.Internal    as Graph.Internal
 
-import           Data.Partition            (Partition)
-import qualified Data.Partition            as Partition
+import           Data.Partition               (Partition)
+import qualified Data.Partition               as Partition
 
-import           Data.STRef                (STRef)
-import qualified Data.STRef                as STRef
+import           Data.STRef                   (STRef)
+import qualified Data.STRef                   as STRef
 
 import           Data.Maybe
-import           Data.Ord                  (comparing)
+import           Data.Ord                     (comparing)
 
-import           Data.Foldable             (asum)
-import           Data.List                 (sortBy)
+import           Data.Foldable                (asum)
+import           Data.List                    (sortBy)
 
-import           Data.Map.Strict           (Map)
-import qualified Data.Map.Strict           as Map
+import           Data.Map.Strict              (Map)
+import qualified Data.Map.Strict              as Map
 
-import           Data.Set                  (Set)
-import qualified Data.Set                  as Set
+import           Data.Set                     (Set)
+import qualified Data.Set                     as Set
 
-import           Data.Word                 (Word16, Word32)
+import           Data.Word                    (Word16, Word32)
 
-import           Data.Unique               (Unique)
-import qualified Data.Unique               as Unique
+import           Data.Unique                  (Unique)
+import qualified Data.Unique                  as Unique
 
-import           Data.Vector               (Vector)
-import qualified Data.Vector               as Vector
+import           Data.Vector                  (Vector)
+import qualified Data.Vector                  as Vector
 
-import           Data.Void                 (Void, absurd)
+import           Data.Void                    (Void, absurd)
 
-import           Data.Proxy                (Proxy (Proxy))
+import           Data.Proxy                   (Proxy (Proxy))
 
 import           Data.SBV
                  (SBV, SInteger, Symbolic, (.<), (.<=), (.==))
-import qualified Data.SBV                  as SBV
-import qualified Data.SBV.Internals        as SBV.Internals
+import qualified Data.SBV                     as SBV
+import qualified Data.SBV.Internals           as SBV.Internals
 
-import           Flow                      ((.>), (|>))
+import           Flow                         ((.>), (|>))
 
-import           GHC.Generics              (Generic)
+import           GHC.Generics                 (Generic)
 
-import           EqSat.Internal.MHashMap   (MHashMap)
-import qualified EqSat.Internal.MHashMap   as MHashMap
+import           EqSat.Internal.MHashMap      (MHashMap)
+import qualified EqSat.Internal.MHashMap      as MHashMap
 
-import           EqSat.Internal.MHashSet   (MHashSet)
-import qualified EqSat.Internal.MHashSet   as MHashSet
+import           EqSat.Internal.MHashSet      (MHashSet)
+import qualified EqSat.Internal.MHashSet      as MHashSet
 
-import           EqSat.Variable            (Variable)
-import qualified EqSat.Variable            as Variable
+import           EqSat.Variable               (Variable)
+import qualified EqSat.Variable               as Variable
 
 import           EqSat.Term
                  (ClosedTerm, OpenTerm, Term (MkNodeTerm, MkVarTerm))
-import qualified EqSat.Term                as Term
+import qualified EqSat.Term                   as Term
 
-import           EqSat.Equation            (Equation)
-import qualified EqSat.Equation            as Equation
+import           EqSat.Equation               (Equation)
+import qualified EqSat.Equation               as Equation
 
-import           EqSat.Domain              (Domain)
+import           EqSat.Domain                 (Domain)
 
 import           EqSat.IsExpression
                  (IsExpression (exprToTerm, termToExpr))
 
+import qualified EqSat.Internal.PrettyPrinter as PP
+
 --------------------------------------------------------------------------------
 
--- | A 'Term', along with its 'Type' and the 'Type' of all its free variables.
-data TypedTerm var node expr
+-- | A substitution is basically a partial function.
+--
+--   We use a function type rather than a 'HashMap' or 'Map' because we want to
+--   allow users to use whatever dictionary type makes sense for their
+--   application, as long as it supports lookup.
+type Substitution a b
+  = a -> Maybe b
+
+-- | A 'TypedTerm' consists of three things:
+--
+--   1. The underlying 'Term'.
+--   2. A function, called the /whole-term typing function/, that, given a
+--      substitution of metavariables for types, returns the least general type
+--      assignable to the result of substituting terms with those types for the
+--      metavariables in the underlying term.
+--      If the substitution is invalid (e.g.: it returns 'Nothing' for one of
+--      the free variables of the underlying 'Term', or it contains a
+--      replacement @(x : S) ↦ (y : T)@ such that @S ⊂ T@), then this function
+--      must return 'Nothing'.
+--   3. A substitution map, called the /metavariable typing function/, from
+--      metavariables to their most general types.
+--
+--   Laws:
+--
+--   1. The preimage of the metavariable typing function must be the same as the
+--      set of free variables of the underlying term.
+--   2. Denoting the metavariable typing function @m@ and the whole-term typing
+--      function @w@ and the subtyping relation @(⊆) ∈ ty → ty → 'Bool'@,
+--      if @θ@ is a substitution such that for every free variable @v@ of the
+--      underlying term, @((⊆) '<$>' θ v '<*>' m v) ≡ 'Just' 'True'@, then
+--      there exists a type @t@ such that @w θ ≡ 'Just' t@.
+data TypedTerm node var ty
   = UnsafeMkTypedTerm
     { _typedTermUnderlyingTerm :: Term node var
-    , _typedTermOverallType    :: Type expr
-    , _typedTermVarType        :: var -> Maybe (Type expr)
+    , _typedTermOverallType    :: Substitution var ty -> Maybe ty
+    , _typedTermVarType        :: Substitution var ty
     }
   deriving ()
 
 -- | Safely create a 'TypedTerm'.
+--
+--   This ensures that:
+--
+--   1. The metavariable typing function is minimal (i.e.: it does not assign
+--      types to any metavariables that aren't free variables of the underlying
+--      term).
+--   2. The result of giving the metavariable typing function to the whole-term
+--      typing function is @'Just' t@ for some type @t@.
 makeTypedTerm
-  :: (Ord var, TypeSystem node expr)
+  :: (Ord var)
   => Term node var
   -- ^ The underlying 'Term' of the 'TypedTerm' we are going to make.
-  -> Type expr
+  -> (Substitution var ty -> Maybe ty)
   -- ^ The overall 'Type' of the given 'Term'.
-  -> (var -> Maybe (Type expr))
+  -> Substitution var ty
   -- ^ The most general inferred type for each of the variables in the 'Term'.
   --   The function must return 'Just' if the given variable was one of the
   --   free variables of the term, or else an 'AssertionFailed' exception
   --   will be thrown before the 'TypedTerm' is returned by this function.
-  -> TypedTerm var node expr
-  -- ^ A typed term.
-makeTypedTerm term overallType varType
-  = let free  = Term.freeVars term
-        tterm = UnsafeMkTypedTerm
-                { _typedTermUnderlyingTerm = term
-                , _typedTermOverallType    = overallType
-                , _typedTermVarType        = \var -> if var `Set.member` free
-                                                     then varType var
-                                                     else Nothing
-                }
-    in assert (all (varType .> isJust) free) tterm
+  -> Maybe (TypedTerm node var ty)
+  -- ^ A typed term, if all the preconditions are met.
+makeTypedTerm term overallType varType = do
+  let free  = Term.freeVars term
+  let tterm = UnsafeMkTypedTerm
+              { _typedTermUnderlyingTerm = term
+              , _typedTermOverallType    = overallType
+              , _typedTermVarType        = \var -> if var `Set.member` free
+                                                   then varType var
+                                                   else Nothing
+              }
+  guard (all (varType .> isJust) free)
+  guard (isJust (overallType varType))
+  pure tterm
+
+-- | Get the underlying term of the given 'TypedTerm'.
+underlyingTerm
+  :: TypedTerm node var ty
+  -- ^ A 'TypedTerm'.
+  -> Term node var
+  -- ^ The underlying term of the given 'TypedTerm'.
+underlyingTerm = _typedTermUnderlyingTerm
+
+-- | Get the whole-term typing function of the given 'TypedTerm'.
+wholeTermTypingFunction
+  :: TypedTerm node var ty
+  -- ^ A 'TypedTerm'.
+  -> (Substitution var ty -> Maybe ty)
+  -- ^ The whole-term typing function of the given 'TypedTerm'.
+wholeTermTypingFunction = _typedTermOverallType
+
+-- | Get the metavariable typing function of the given 'TypedTerm'.
+metavariableTypingFunction
+  :: TypedTerm node var ty
+  -- ^ A 'TypedTerm'.
+  -> Substitution var ty
+  -- ^ The metavariable typing function of the given 'TypedTerm'.
+metavariableTypingFunction = _typedTermVarType
 
 --------------------------------------------------------------------------------
 
@@ -156,6 +222,9 @@ makeTypedTerm term overallType varType
 class (IsExpression node expr) => TypeSystem node expr where
   -- | A type whose values represent the types of expressions.
   type Type expr
+
+  -- | A type whose values represent type errors.
+  type TypeError expr
 
   -- | Infer the type of an open term.
   --
@@ -170,13 +239,13 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   create a 'TypedTerm' with a 'Map' or a 'HashMap' for the types of the
   --   variables.
   inferType
-    :: (Ord var, Hashable var)
+    :: (Ord var, Hashable var, MonadError (TypeError expr) m)
     => proxy expr
     -> Term node var
-    -> Maybe (TypedTerm var node expr)
+    -> m (TypedTerm var node (Type expr))
 
-  -- | Return 'True' if the two given 'Type's are equivalent in your type
-  --   system, and return 'False' otherwise.
+  -- | Return 'True' if the first given 'Type' is a subtype of the second
+  --   given 'Type' in your type system, and return 'False' otherwise.
   --
   --   This function takes as input a proxy value (e.g.: 'Proxy') to avoid use
   --   of @-XAllowAmbiguousTypes@.
@@ -184,12 +253,46 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   Laws:
   --
   --   1. This should be a total function.
-  --   2. This should be an equivalence relation.
-  equivalentType
+  --   2. This should be a preorder (transitive and reflexive).
+  isSubtype
     :: proxy expr
     -> Type expr
     -> Type expr
     -> Bool
+
+  -- | FIXME: doc
+  showTypeError
+    :: proxy expr
+    -> TypeError expr
+    -> PP.Doc ann
+
+  -- | FIXME: doc
+  --
+  --   Laws:
+  --
+  --   1. For any @e ∈ 'TypeError' expr@ and @p ∈ 'Proxy' expr@,
+  --      @(\\_ → ()) '<$>' 'showTypeErrorANSI' p e ≡ 'showTypeError' p e@.
+  showTypeErrorANSI
+    :: proxy expr
+    -> TypeError expr
+    -> PP.Doc PP.AnsiStyle
+  showTypeErrorANSI = showTypeError
+
+-- | FIXME: doc
+checkEquation
+  :: ( Ord var, Hashable var
+     , TypeSystem node expr
+     , MonadError (TypeError expr) m
+     )
+  => proxy expr
+  -> (Term node var, Term node var)
+  -> m (Equation node var)
+checkEquation p (lhs, rhs) = do
+  lhsTy <- inferType p lhs
+  rhsTy <- inferType p rhs
+  -- unless (isSubtype p rhsTy lhsTy) $ do
+  --   undefined
+  undefined
 
 --------------------------------------------------------------------------------
 
@@ -238,7 +341,8 @@ data PEG g node
     }
   deriving ()
 
-instance Eq (PEG g node) where
+-- FIXME: write instance
+-- instance Eq (PEG g node) where
 
 
 -- | Smart constructor for PEGs.
@@ -672,14 +776,18 @@ applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
 -- | Given a performance heuristic and an 'EPEG', return the 'PEG' subgraph that
 --   maximizes the heuristic.
 selectBest
-  :: (Heuristic heuristic)
+  :: (MonadIO m, Heuristic heuristic)
   => heuristic node
   -- ^ FIXME: doc
   -> EPEG g node
   -- ^ FIXME: doc
-  -> PEG g node
+  -> m (SomePEG node)
   -- ^ FIXME: doc
-selectBest heuristic epeg = undefined
+selectBest heuristic epeg = do
+  maybeResult <- runHeuristic epeg heuristic
+  case maybeResult of
+    Just r  -> pure r
+    Nothing -> fail "DEBUG: selectBest failed"
 
 -- | Given a 'Set' of 'Equation's and an 'EPEG', this will return a new 'EPEG'
 --   that is the result of matching and applying one of the equations to the
@@ -698,7 +806,7 @@ saturateStep eqs epeg = do
 
 -- | The internal version of equality saturation.
 saturate
-  :: (Monad m, Heuristic heuristic)
+  :: (MonadIO m, Heuristic heuristic)
   => Set (Equation node Variable)
   -- ^ FIXME: doc
   -> heuristic node
@@ -707,17 +815,18 @@ saturate
   -- ^ FIXME: doc
   -> (EPEG g node -> m Bool)
   -- ^ FIXME: doc
-  -> (PEG g node -> m (Maybe a))
+  -> (SomePEG node -> m (Maybe a))
   -- ^ FIXME: doc
   -> m [a]
   -- ^ FIXME: doc
-saturate eqs heuristic initial timer cb = do
+saturate eqs heuristic initial timer callback = do
   let go epeg soFar = do
         case saturateStep eqs epeg of
           Just epeg' -> do let recurse = go epeg'
                            shouldSelectBest <- timer epeg'
                            if shouldSelectBest
-                             then cb (selectBest heuristic epeg')
+                             then selectBest heuristic epeg'
+                                  >>= callback
                                   >>= \case (Just x) -> recurse (x : soFar)
                                             Nothing  -> recurse soFar
                              else recurse soFar
@@ -727,8 +836,11 @@ saturate eqs heuristic initial timer cb = do
 -- | The public interface of equality saturation.
 equalitySaturation
   :: forall node heuristic expr m a.
-     ( IsExpression node expr, MonadError SomeException m
-     , Heuristic heuristic )
+     ( IsExpression node expr
+     , MonadIO m
+     , MonadError SomeException m
+     , Heuristic heuristic
+     )
   => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
   -> heuristic node
@@ -752,9 +864,9 @@ equalitySaturation
   --   chronological order (e.g.: starting with newest and ending with oldest).
 equalitySaturation eqs heuristic initial timer cb
   = let exprToEPEG = exprToTerm .> makePEG' .> pegToEPEG
-        pegToExpr peg = case termToExpr (pegToTerm peg) of
-                          Left  exception -> throwError exception
-                          Right result    -> pure result
+        pegToExpr (MkSomePEG peg) = case termToExpr (pegToTerm peg) of
+                                      Left  exception -> throwError exception
+                                      Right result    -> pure result
     in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)
 
 --------------------------------------------------------------------------------
