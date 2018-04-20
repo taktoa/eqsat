@@ -76,6 +76,7 @@ library
                         , vector-algorithms           >= 0.7   && < 0.8
     exposed-modules:      EqSat
                         , EqSat.Term
+                        , EqSat.TypedTerm
                         , EqSat.Equation
                         , EqSat.Variable
                         , EqSat.Domain
