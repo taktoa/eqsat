@@ -221,10 +221,10 @@ metavariableTypingFunction = _typedTermVarType
 -- | FIXME: doc
 class (IsExpression node expr) => TypeSystem node expr where
   -- | A type whose values represent the types of expressions.
-  type Type expr
+  data Type expr
 
   -- | A type whose values represent type errors.
-  type TypeError expr
+  data TypeError expr
 
   -- | Infer the type of an open term.
   --
@@ -240,8 +240,7 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   variables.
   inferType
     :: (Ord var, Hashable var, MonadError (TypeError expr) m)
-    => proxy expr
-    -> Term node var
+    => Term node var
     -> m (TypedTerm var node (Type expr))
 
   -- | Return 'True' if the first given 'Type' is a subtype of the second
@@ -255,15 +254,14 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   1. This should be a total function.
   --   2. This should be a preorder (transitive and reflexive).
   isSubtype
-    :: proxy expr
-    -> Type expr
+    :: Type expr
     -> Type expr
     -> Bool
 
-  -- | FIXME: doc
+  -- | Pretty-print a @'TypeError' expr@ as a 'PP.Doc'. This version does not
+  --   allow any annotations.
   showTypeError
-    :: proxy expr
-    -> TypeError expr
+    :: TypeError expr
     -> PP.Doc ann
 
   -- | FIXME: doc
@@ -273,8 +271,7 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   1. For any @e ∈ 'TypeError' expr@ and @p ∈ 'Proxy' expr@,
   --      @(\\_ → ()) '<$>' 'showTypeErrorANSI' p e ≡ 'showTypeError' p e@.
   showTypeErrorANSI
-    :: proxy expr
-    -> TypeError expr
+    :: TypeError expr
     -> PP.Doc PP.AnsiStyle
   showTypeErrorANSI = showTypeError
 
@@ -284,12 +281,11 @@ checkEquation
      , TypeSystem node expr
      , MonadError (TypeError expr) m
      )
-  => proxy expr
-  -> (Term node var, Term node var)
+  => (Term node var, Term node var)
   -> m (Equation node var)
-checkEquation p (lhs, rhs) = do
-  lhsTy <- inferType p lhs
-  rhsTy <- inferType p rhs
+checkEquation (lhs, rhs) = do
+  lhsTy <- inferType lhs
+  rhsTy <- inferType rhs
   -- unless (isSubtype p rhsTy lhsTy) $ do
   --   undefined
   undefined
