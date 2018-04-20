@@ -144,16 +144,139 @@ quotientSomeGraph vf ef
 
 --------------------------------------------------------------------------------
 
--- The `UnsafeMkPEG` constructor should never be used; instead all code should
--- be written in terms of the functions below.
---
--- The reason a `PEG` contains a `GraphNode` rather than a `Graph` is that it
--- is a rooted graph.
+-- | A 'PEG', or Program Expression Graph, is a rooted directed graph
+--   representing a referentially transparent AST with sharing.
 data PEG g node
   = UnsafeMkPEG
     !(Graph g Int (Unique, node))
+    -- ^ The 'Graph' underlying the 'PEG'.
     !(Vertex g)
+    -- ^ The root node of the 'PEG'.
   deriving ()
+
+-- | Smart constructor for PEGs.
+--
+--   Postconditions:
+--     * the underlying graph of the returned PEG will never have two
+--       edges with the same label coming out of the same node.
+--     * if you sort the children of a node by their edge labels in increasing
+--       order, then you will recover the order of the children of that node in
+--       the original subterm.
+makePEG
+  :: Term node (SomePEG node)
+  -- ^ FIXME: doc
+  -> PEG g node
+  -- ^ FIXME: doc
+makePEG = undefined
+
+-- | FIXME: doc
+makePEG'
+  :: ClosedTerm node
+  -- ^ FIXME: doc
+  -> PEG g node
+  -- ^ FIXME: doc
+makePEG' = fmap absurd .> makePEG
+
+-- | Get the root node of the 'Graph' underlying the given 'PEG'.
+pegRoot
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> Vertex g
+  -- ^ FIXME: doc
+pegRoot (UnsafeMkPEG _ root) = root
+
+-- | FIXME: doc
+pegGraph
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> Graph g Int (Unique, node)
+  -- ^ FIXME: doc
+pegGraph (UnsafeMkPEG graph _) = graph
+
+-- | FIXME: doc
+pegAtVertex
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> Vertex g
+  -- ^ FIXME: doc
+  -> node
+  -- ^ FIXME: doc
+pegAtVertex peg vertex = snd (Graph.atVertex vertex (pegGraph peg))
+
+-- | FIXME: doc
+pegRootNode
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> node
+  -- ^ FIXME: doc
+pegRootNode peg = pegAtVertex peg (pegRoot peg)
+
+-- | Given a 'PEG', return a 'Vector' of 'PEG's, each representing the subgraph
+--   rooted at each child of the root node of the given 'PEG'.
+pegChildren
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> Vector (PEG g node)
+  -- ^ FIXME: doc
+pegChildren = undefined -- FIXME
+-- pegChildren node = let outgoing :: [(Int, GraphNode node Int)]
+--                        outgoing = Set.toList (outgoingEdges (pegRoot node))
+--                        children :: Vector (GraphNode node Int)
+--                        children = Vector.fromList
+--                                   (map snd (sortBy (comparing fst) outgoing))
+--                    in Vector.map UnsafeMkPEG children
+
+-- | Convert a 'PEG' into a term by starting at the root node and recursively
+--   expanding nodes. If there is a cycle in the 'PEG', this will not terminate.
+pegToTerm
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> ClosedTerm node
+  -- ^ FIXME: doc
+pegToTerm peg = MkNodeTerm
+                (pegRootNode peg)
+                (Vector.map pegToTerm (pegChildren peg))
+
+-- | Modify a 'PEG', returning 'Nothing' if the modification you made to the
+--   underlying 'Graph' made the 'PEG' no longer valid (e.g.: you added two
+--   edges out of the same node with the same edge labels).
+modifyPEG
+  :: (Monad m)
+  => PEG g node
+  -- ^ FIXME: doc
+  -> (Graph g Int node -> MaybeT m (Graph g' Int node))
+  -- ^ FIXME: doc
+  -> MaybeT m (PEG g' node)
+  -- ^ FIXME: doc
+modifyPEG peg f = do
+  undefined
+
+-- | FIXME: doc
+normalizePEG
+  :: PEG g node
+  -- ^ FIXME: doc
+  -> (Vertex g -> Vertex g, PEG g node)
+  -- ^ FIXME: doc
+normalizePEG input = runST $ do
+  updaterHM <- MHashMap.new
+  pegRef <- STRef.newSTRef input
+  undefined
+  updater <- undefined
+  output  <- STRef.readSTRef pegRef
+  pure (updater, output)
+
+-- | FIXME: doc
+traversePEG
+  :: (Monad m)
+  => PEG g nodeA
+  -- ^ FIXME: doc
+  -> (Vertex g -> nodeA -> m nodeB)
+  -- ^ FIXME: doc
+  -> m (PEG g nodeB)
+  -- ^ FIXME: doc
+traversePEG = undefined
+
+--------------------------------------------------------------------------------
 
 -- | FIXME: doc
 data SomePEG node where
@@ -170,106 +293,18 @@ withSomePEG
   -- ^ FIXME: doc
 withSomePEG (MkSomePEG peg) f = f peg
 
--- Smart constructor for PEGs.
---
--- Postconditions:
---   * the underlying graph of the returned PEG will never have two
---     edges with the same label coming out of the same node.
---   * if you sort the children of a node by their edge labels in increasing
---     order, then you will recover the order of the children of that node in
---     the original subterm.
-makePEG :: Term node (SomePEG node) -> PEG g node
-makePEG = undefined
-
--- | FIXME: doc
-makePEG' :: ClosedTerm node -> PEG g node
-makePEG' = fmap absurd .> makePEG
-
--- Get the root node of the `Graph` underlying the given `PEG`.
-pegRoot :: PEG g node -> Vertex g
-pegRoot (UnsafeMkPEG _ root) = root
-
-pegGraph :: PEG g node -> Graph g Int (Unique, node)
-pegGraph (UnsafeMkPEG graph _) = graph
-
-pegAtVertex :: PEG g node -> Vertex g -> node
-pegAtVertex peg vertex = snd (Graph.atVertex vertex (pegGraph peg))
-
-pegRootNode :: PEG g node -> node
-pegRootNode peg = pegAtVertex peg (pegRoot peg)
-
--- Given a `PEG`, return a `Vector` of `PEG`s, each representing the subgraph
--- rooted at each child of the root node of the given `PEG`.
-pegChildren :: PEG g node -> Vector (PEG g node)
-pegChildren = undefined -- FIXME
--- pegChildren node = let outgoing :: [(Int, GraphNode node Int)]
---                        outgoing = Set.toList (outgoingEdges (pegRoot node))
---                        children :: Vector (GraphNode node Int)
---                        children = Vector.fromList
---                                   (map snd (sortBy (comparing fst) outgoing))
---                    in Vector.map UnsafeMkPEG children
-
--- Convert a `PEG` into a term by starting at the root node and recursively
--- expanding nodes. If there is a cycle in the PEG, this will not terminate.
-pegToTerm :: PEG g node -> ClosedTerm node
-pegToTerm peg = MkNodeTerm
-                (pegRootNode peg)
-                (Vector.map pegToTerm (pegChildren peg))
-
--- Modify a PEG, returning `Nothing` if the modification you made to the
--- underlying `Graph` made the PEG no longer valid (e.g.: you added two edges
--- out of the same node with the same edge labels).
-modifyPEG
-  :: (Monad m)
-  => PEG g node
-  -> (Graph g Int node -> MaybeT m (Graph g' Int node))
-  -> MaybeT m (PEG g' node)
-modifyPEG peg f = do
-  undefined
-
-normalizePEG
-  :: PEG g node
-  -> (Vertex g -> Vertex g, PEG g node)
-normalizePEG input = runST $ do
-  updaterHM <- MHashMap.new
-  pegRef <- STRef.newSTRef input
-  undefined
-  updater <- undefined
-  output  <- STRef.readSTRef pegRef
-  pure (updater, output)
-
-traversePEG
-  :: (Monad m)
-  => PEG g nodeA
-  -> (Vertex g -> nodeA -> m nodeB)
-  -> m (PEG g nodeB)
-traversePEG = undefined
-
 --------------------------------------------------------------------------------
 
--- | An EPEG (or equality-PEG) is a PEG along with an equivalence relation on
---   the PEG nodes.
+-- | An 'EPEG' (or equivalence PEG) is a 'PEG' along with an equivalence
+--   relation on the 'PEG' nodes.
 data EPEG g node
   = MkEPEG
     { epegPEG        :: !(PEG g node)
+      -- ^ The underlying 'PEG'.
     , epegEqRelation :: !(Partition (Vertex g))
+      -- ^ The equivalence relation on nodes.
     }
   deriving ()
-
--- | FIXME: doc
-data SomeEPEG node where
-  -- | FIXME: doc
-  MkSomeEPEG :: !(EPEG g node) -> SomeEPEG node
-
--- | FIXME: doc
-withSomeEPEG
-  :: SomeEPEG node
-  -- ^ FIXME: doc
-  -> (forall g. EPEG g node -> result)
-  -- ^ FIXME: doc
-  -> result
-  -- ^ FIXME: doc
-withSomeEPEG (MkSomeEPEG epeg) f = f epeg
 
 -- | Return a 'Bool' representing whether the two given vertices are in the same
 --   class of the equivalence relation contained in the given 'EPEG'.
@@ -299,7 +334,7 @@ epegAddEquivalence (a, b) epeg
                                        |> Partition.joinElems a b
                     })
 
--- | Convert a PEG into the trivial EPEG that holds every node to be
+-- | Convert a 'PEG' into the trivial 'EPEG' that holds every node to be
 --   semantically distinct.
 pegToEPEG
   :: PEG g node
@@ -344,19 +379,43 @@ epegClasses = undefined
 
 --------------------------------------------------------------------------------
 
--- | The type of global performance heuristics.
-type PerformanceHeuristic domain node
+-- | FIXME: doc
+data SomeEPEG node where
+  -- | FIXME: doc
+  MkSomeEPEG :: !(EPEG g node) -> SomeEPEG node
+
+-- | FIXME: doc
+withSomeEPEG
+  :: SomeEPEG node
+  -- ^ FIXME: doc
+  -> (forall g. EPEG g node -> result)
+  -- ^ FIXME: doc
+  -> result
+  -- ^ FIXME: doc
+withSomeEPEG (MkSomeEPEG epeg) f = f epeg
+
+--------------------------------------------------------------------------------
+
+-- | The type of global symbolic performance heuristics.
+type GlobalSymbolicPerformanceHeuristic domain node
   = (forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
 
--- | Optimize the given 'PerformanceHeuristic' on the given 'EPEG', possibly
---   yielding a 'SomePEG' representing the
-runPerformanceHeuristic
+-- | Optimize the given 'GlobalSymbolicPerformanceHeuristic' on the
+--   given 'EPEG' via pseudo-boolean integer programming using @sbv@ / @Z3@'s
+--   optimization support.
+--
+--   If the solver terminates successfully, a 'SomePEG' representing the
+--   best selected sub-'PEG' is returned.
+runGlobalSymbolicPerformanceHeuristic
   :: forall node domain m g.
      (MonadIO m, Domain domain)
   => EPEG g node
-  -> PerformanceHeuristic domain node
+  -- ^ FIXME: doc
+  -> GlobalSymbolicPerformanceHeuristic domain node
+  -- ^ FIXME: doc
   -> m (Maybe (SomePEG node))
-runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
+  -- ^ FIXME: doc
+runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
   let classesSet :: Set (Set (Vertex g))
       classesSet = epegClasses epeg
 
@@ -427,12 +486,28 @@ runPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
 
 --------------------------------------------------------------------------------
 
+class Heuristic heuristic where
+  runHeuristic
+    :: (MonadIO m)
+    => EPEG g node
+    -> heuristic node
+    -> m (Maybe (SomePEG node))
+
+instance (Domain d) => Heuristic (GlobalSymbolicPerformanceHeuristic d) where
+  runHeuristic = runGlobalSymbolicPerformanceHeuristic
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
 matchPattern
   :: forall node var g.
      (Eq node, Ord var, Hashable var)
   => Term node var
+  -- ^ FIXME: doc
   -> EPEG g node
+  -- ^ FIXME: doc
   -> Maybe (HM.HashMap var (EPEG g node))
+  -- ^ FIXME: doc
 matchPattern = do
   let go :: forall s.
             MHashMap s var (EPEG g node)
@@ -460,48 +535,64 @@ matchPattern = do
     go hm term epeg
     MHashMap.freeze hm
 
+-- | FIXME: doc
 applyRule
   :: forall node var g.
      (Eq node, Ord var, Hashable var)
   => (Term node var, Term node var)
+  -- ^ FIXME: doc
   -> EPEG g node
+  -- ^ FIXME: doc
   -> Maybe (EPEG g node)
+  -- ^ FIXME: doc
 applyRule (pat, rep) epeg = runST $ MaybeT.runMaybeT $ do
   -- peg <- epegPEG epeg
   undefined
 
 --------------------------------------------------------------------------------
 
--- Given a performance heuristic and an EPEG, return the PEG subgraph that
--- maximizes the heuristic.
+-- | Given a performance heuristic and an 'EPEG', return the 'PEG' subgraph that
+--   maximizes the heuristic.
 selectBest
-  :: (Domain domain)
-  => PerformanceHeuristic domain node
+  :: (Heuristic heuristic)
+  => heuristic node
+  -- ^ FIXME: doc
   -> EPEG g node
+  -- ^ FIXME: doc
   -> PEG g node
+  -- ^ FIXME: doc
 selectBest heuristic epeg = undefined
 
--- Given a set of equations and an EPEG, this will return a new EPEG that is the
--- result of matching and applying one of the equations to the EPEG. If there is
--- no place in the EPEG where any of the equations apply (and where the result
--- of applying the equation is something that is not already in the graph), then
--- this function will return `Nothing`.
+-- | Given a 'Set' of 'Equation's and an 'EPEG', this will return a new 'EPEG'
+--   that is the result of matching and applying one of the equations to the
+--   'EPEG'. If there is no place in the 'EPEG' where any of the equations apply
+--   (or if the result of applying the equation is something that is already in
+--   the graph), then this function will return 'Nothing'.
 saturateStep
   :: Set (Equation node Variable)
+  -- ^ FIXME: doc
   -> EPEG g node
+  -- ^ FIXME: doc
   -> Maybe (EPEG g node)
+  -- ^ FIXME: doc
 saturateStep eqs epeg = do
   undefined
 
 -- | The internal version of equality saturation.
 saturate
-  :: (Monad m, Domain domain)
+  :: (Monad m, Heuristic heuristic)
   => Set (Equation node Variable)
-  -> PerformanceHeuristic domain node
+  -- ^ FIXME: doc
+  -> heuristic node
+  -- ^ FIXME: doc
   -> EPEG g node
+  -- ^ FIXME: doc
   -> (EPEG g node -> m Bool)
+  -- ^ FIXME: doc
   -> (PEG g node -> m (Maybe a))
+  -- ^ FIXME: doc
   -> m [a]
+  -- ^ FIXME: doc
 saturate eqs heuristic initial timer cb = do
   let go epeg soFar = do
         case saturateStep eqs epeg of
@@ -517,23 +608,24 @@ saturate eqs heuristic initial timer cb = do
 
 -- | The public interface of equality saturation.
 equalitySaturation
-  :: forall node domain expr m a.
-     (IsExpression node expr, MonadError SomeException m, Domain domain)
+  :: forall node heuristic expr m a.
+     ( IsExpression node expr, MonadError SomeException m
+     , Heuristic heuristic )
   => Set (Equation node Variable)
   -- ^ A set of optimization axioms.
-  -> PerformanceHeuristic domain node
+  -> heuristic node
   -- ^ The performance heuristic to optimize.
   -> expr
   -- ^ The code whose performance will be optimized.
   -> (forall g. EPEG g node -> m Bool)
-  -- ^ A callback that, given the current state of the `EPEG`, will decide
-  --   whether we should run `selectBest` again. In many cases, this will be
+  -- ^ A callback that, given the current state of the 'EPEG', will decide
+  --   whether we should run 'selectBest' again. In many cases, this will be
   --   some kind of timer.
   -> (expr -> m (Maybe a))
-  -- ^ A callback that will be called with the optimized `Term` every time
-  --   `selectBest` has found a new best version of the original program.
+  -- ^ A callback that will be called with the optimized 'Term' every time
+  --   'selectBest' has found a new best version of the original program.
   --   The argument is the new best version, and the return value will be
-  --   collected in a list during the equality saturation loop. If `Nothing`
+  --   collected in a list during the equality saturation loop. If 'Nothing'
   --   is ever returned by this callback, equality saturation will terminate
   --   early; otherwise it will run for an amount of time that is exponential
   --   in the size of the original program.
