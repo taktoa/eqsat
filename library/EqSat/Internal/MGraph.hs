@@ -21,6 +21,11 @@ import qualified Data.STRef                as STRef
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT))
 import qualified Control.Monad.Trans.Maybe as MaybeT
 
+import           Control.Monad.Trans.Class (MonadTrans (lift))
+import qualified Control.Monad.Trans.Class as MonadTrans
+
+import           Data.Maybe
+
 import           Data.Hashable             (Hashable (hashWithSalt))
 
 import qualified Data.Judy                 as Judy
@@ -41,6 +46,8 @@ import qualified EqSat.Internal.MHashMap   as MHashMap
 
 --------------------------------------------------------------------------------
 
+-- * 'MGraph'
+
 -- | FIXME: doc
 data MGraph s g v e
   = UnsafeMkMGraph
@@ -51,6 +58,8 @@ data MGraph s g v e
   deriving ()
 
 --------------------------------------------------------------------------------
+
+-- * 'MNode'
 
 -- | FIXME: doc
 data MNode s g v e
@@ -103,6 +112,8 @@ labelMNode
 labelMNode = _mnodeLabel
 
 --------------------------------------------------------------------------------
+
+-- * 'MEdge'
 
 -- | FIXME: doc
 data MEdge s g v e
@@ -157,29 +168,51 @@ pairMEdge
   -- ^ FIXME: doc
 pairMEdge e = (labelMNode (sourceMEdge e), labelMNode (targetMEdge e))
 
--- | FIXME: doc
+-- | Returns the weight associated with the given 'MEdge', if it has not yet
+--   been deleted from its graph.
 getWeightMEdge
   :: (Eq v, Hashable v, PrimMonad m)
   => MEdge (PrimState m) g v e
   -- ^ FIXME: doc
-  -> m e
+  -> m (Maybe e)
   -- ^ FIXME: doc
-getWeightMEdge e = do
-  undefined
+getWeightMEdge edge = MaybeT.runMaybeT $ do
+  let graph = _medgeGraph edge
+  let (source, target) = pairMEdge edge
+  let edgeMap = _mgraphEdgeMap graph
+  outgoingMap <- MaybeT (MHashMap.lookup edgeMap     source)
+  weight      <- MaybeT (MHashMap.lookup outgoingMap target)
+  pure weight
 
 -- | FIXME: doc
 setWeightMEdge
-  :: (Eq v, Hashable v, PrimMonad m)
+  :: (Eq v, Eq e, Hashable v, Hashable e, PrimMonad m)
   => MEdge (PrimState m) g v e
   -- ^ FIXME: doc
   -> e
   -- ^ FIXME: doc
   -> m Bool
   -- ^ FIXME: doc
-setWeightMEdge e = do
-  undefined
+setWeightMEdge edge weight = do
+  fmap isJust $ MaybeT.runMaybeT $ do
+    let graph = _medgeGraph edge
+    let (source, target) = pairMEdge edge
+    let edgeMap = _mgraphEdgeMap       graph
+    let wtpMap  = _mgraphWeightToPairs graph
+    outgoingMap <- MaybeT (MHashMap.lookup edgeMap     source)
+    oldWeight   <- MaybeT (MHashMap.lookup outgoingMap target)
+    pairSet     <- MaybeT (MHashMap.lookup wtpMap      oldWeight)
+    MHashMap.insert outgoingMap target weight
+    MHashSet.delete pairSet (source, target)
+    newPairSet <- do
+      hs <- MHashSet.newWithCapacity 1
+      MHashSet.insert hs (source, target)
+      pure hs
+    MHashMap.insertWith wtpMap weight newPairSet $ \old _ -> do
+      MHashSet.insert old (source, target)
+      pure old
 
--- | FIXME: doc
+-- | Delete the given 'MEdge' from its 'MGraph'.
 deleteMEdge
   :: (Eq v, Hashable v, PrimMonad m)
   => MEdge (PrimState m) g v e
@@ -189,17 +222,35 @@ deleteMEdge
 deleteMEdge e = do
   undefined
 
--- | FIXME: doc
+-- | Extract the source, target, and weight of the given 'MEdge', and then
+--   delete it from its 'MGraph'.
 consumeMEdge
   :: (Eq v, Hashable v, PrimMonad m)
   => MEdge (PrimState m) g v e
   -- ^ FIXME: doc
-  -> m ((MNode s g v e, MNode s g v e), e)
+  -> m (Maybe ((MNode (PrimState m) g v e, MNode (PrimState m) g v e), e))
   -- ^ FIXME: doc
-consumeMEdge e = do
-  undefined
+consumeMEdge e = MaybeT.runMaybeT $ do
+  let source = sourceMEdge e
+  let target = targetMEdge e
+  weight <- MaybeT (getWeightMEdge e)
+  lift $ deleteMEdge e
+  pure ((source, target), weight)
+
+-- | FIXME: doc
+findMEdge
+  :: (Eq v, Hashable v, PrimMonad m)
+  => MGraph (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> (v, v)
+  -- ^ FIXME: doc
+  -> m (Maybe (MEdge (PrimState m) g v e))
+  -- ^ FIXME: doc
+findMEdge = undefined
 
 --------------------------------------------------------------------------------
+
+-- * Simple subroutines
 
 -- | FIXME: doc
 addNode
@@ -216,8 +267,6 @@ addNode graph node = do
   targetMap <- MHashMap.new
   MHashMap.insert (_mgraphEdgeMap graph) node targetMap
   pure (result, UnsafeMkMNode graph node)
-
---------------------------------------------------------------------------------
 
 -- | FIXME: doc
 addEdge
@@ -258,8 +307,6 @@ addEdge graph source target weight = do
                | otherwise                          -> UpdatedEdge
   pure (aer, UnsafeMkMEdge graph source target)
 
---------------------------------------------------------------------------------
-
 -- | Return 'True' iff the given graph contains the given node.
 memberNode
   :: (Eq v, Hashable v, PrimMonad m)
@@ -271,22 +318,6 @@ memberNode
   -- ^ FIXME: doc
 memberNode graph node = do
   MHashSet.member (_mgraphNodeSet graph) node
-
--- | Returns the weight of the edge with the given source and target, if there
---   is one.
-lookupEdge
-  :: (Eq v, Hashable v, PrimMonad m)
-  => MGraph (PrimState m) g v e
-  -- ^ FIXME: doc
-  -> (v, v)
-  -- ^ FIXME: doc
-  -> m (Maybe e)
-  -- ^ FIXME: doc
-lookupEdge graph (source, target) = MaybeT.runMaybeT $ do
-  let edgeMap = _mgraphEdgeMap graph
-  outgoingMap <- MaybeT (MHashMap.lookup edgeMap     source)
-  weight      <- MaybeT (MHashMap.lookup outgoingMap target)
-  pure weight
 
 -- | FIXME: doc
 getEdgesWithWeight
@@ -302,6 +333,19 @@ getEdgesWithWeight graph weight = do
             >>= maybe MHashSet.new pure
             >>= MHashSet.freeze
   pure (HashSet.map (uncurry (UnsafeMkMEdge graph)) frozen)
+
+-- | FIXME: doc
+getOutgoingEdges
+  :: (Eq v, Eq e, Hashable v, Hashable e, PrimMonad m)
+  => MNode (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> m (HashMap (MEdge (PrimState m) g v e) e)
+  -- ^ FIXME: doc
+getOutgoingEdges = undefined
+
+--------------------------------------------------------------------------------
+
+
 
 --------------------------------------------------------------------------------
 
