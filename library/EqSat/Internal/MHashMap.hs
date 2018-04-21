@@ -8,9 +8,12 @@
 module EqSat.Internal.MHashMap
   ( MHashMap
   , new
-  , newSized
+  , newWithCapacity
+  , length
+  , null
   , delete
   , lookup
+  , member
   , insert
   , insertWith
   , mapM_
@@ -24,15 +27,22 @@ module EqSat.Internal.MHashMap
 --------------------------------------------------------------------------------
 
 import           Prelude
-                 (Double, Eq, Int, Show, error, flip, ($))
+                 (Bool, Double, Num ((+), (-)), error, flip, ($))
 
 import           Control.Applicative        (pure)
-import           Control.Monad              (Monad ((>>=)))
-import           Data.Functor               ((<$>))
+import           Control.Monad              (Monad ((>>=)), when)
 
-import           Control.Monad.Primitive    (PrimMonad (PrimState))
+import           Data.Eq                    (Eq ((==)))
+import           Data.Functor               (fmap)
+import           Data.Int                   (Int)
+import           Data.Ord                   ((<))
 
-import           Data.Maybe                 (Maybe (Just, Nothing))
+import           Control.Monad.Primitive    (PrimMonad (PrimState), stToPrim)
+
+import           Data.STRef                 (STRef)
+import qualified Data.STRef                 as STRef
+
+import           Data.Maybe                 (Maybe (Just, Nothing), isJust)
 
 import           Data.Hashable              (Hashable)
 
@@ -45,25 +55,52 @@ import           Flow                       ((.>))
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-newtype MHashMap s k v
-  = MkMHashMap (MHM.MHashMap s k v)
-  deriving (Show)
+data MHashMap s k v
+  = UnsafeMkMHashMap
+    { _mhashmapSizeRef    :: !(STRef s Int)
+    , _mhashmapUnderlying :: !(MHM.MHashMap s k v)
+    }
+  deriving ()
 
 -- | FIXME: doc
 new
   :: (PrimMonad m)
   => m (MHashMap (PrimState m) k v)
   -- ^ FIXME: doc
-new = MkMHashMap <$> MHM.new
+new = do
+  sizeRef    <- stToPrim (STRef.newSTRef 0)
+  underlying <- MHM.new
+  pure (UnsafeMkMHashMap sizeRef underlying)
 
 -- | FIXME: doc
-newSized
+newWithCapacity
   :: (PrimMonad m)
   => Int
   -- ^ FIXME: doc
   -> m (MHashMap (PrimState m) k v)
   -- ^ FIXME: doc
-newSized size = MkMHashMap <$> MHM.newSized size
+newWithCapacity capacity = do
+  sizeRef    <- stToPrim (STRef.newSTRef 0)
+  underlying <- MHM.newSized capacity
+  pure (UnsafeMkMHashMap sizeRef underlying)
+
+-- | FIXME: doc
+length
+  :: (PrimMonad m)
+  => MHashMap (PrimState m) k v
+  -- ^ FIXME: doc
+  -> m Int
+  -- ^ FIXME: doc
+length (UnsafeMkMHashMap sr _) = stToPrim (STRef.readSTRef sr)
+
+-- | FIXME: doc
+null
+  :: (PrimMonad m)
+  => MHashMap (PrimState m) k v
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
+null = length .> fmap (== 0)
 
 -- | FIXME: doc
 delete
@@ -74,7 +111,11 @@ delete
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-delete (MkMHashMap hm) = MHM.delete hm
+delete (mhm@(UnsafeMkMHashMap sr hm)) k = do
+  wasMember <- member mhm k
+  when wasMember $ do
+    modifySize mhm (\x -> x - 1)
+  MHM.delete hm k
 
 -- | FIXME: doc
 lookup
@@ -85,7 +126,18 @@ lookup
   -- ^ FIXME: doc
   -> m (Maybe v)
   -- ^ FIXME: doc
-lookup (MkMHashMap hm) = MHM.lookup hm
+lookup (UnsafeMkMHashMap _ hm) = MHM.lookup hm
+
+-- | FIXME: doc
+member
+  :: (Eq k, Hashable k, PrimMonad m)
+  => MHashMap (PrimState m) k v
+  -- ^ FIXME: doc
+  -> k
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
+member hm = lookup hm .> fmap isJust
 
 -- | FIXME: doc
 insert
@@ -98,7 +150,7 @@ insert
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-insert (MkMHashMap hm) = MHM.insert hm
+insert mhm k v = insertWith mhm k v (\_ new -> pure new)
 
 -- | FIXME: doc
 insertWith
@@ -113,11 +165,13 @@ insertWith
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-insertWith hm k v combiner = do
-  value <- lookup hm k
-           >>= (\case (Just v') -> combiner v v'
-                      Nothing   -> pure v)
-  insert hm k value
+insertWith (mhm@(UnsafeMkMHashMap _ hm)) k v combiner = do
+  modifySize mhm (\x -> x + 1)
+  value <- lookup mhm k
+           >>= (\case (Just old) -> do modifySize mhm (\x -> x - 1)
+                                       combiner old v
+                      Nothing    -> pure v)
+  MHM.insert hm k value
 
 -- | FIXME: doc
 mapM_
@@ -128,7 +182,7 @@ mapM_
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-mapM_ f (MkMHashMap hm) = MHM.mapM_ f hm
+mapM_ f (UnsafeMkMHashMap _ hm) = MHM.mapM_ f hm
 
 -- | FIXME: doc
 forM_
@@ -152,7 +206,7 @@ foldM
   -- ^ FIXME: doc
   -> m a
   -- ^ FIXME: doc
-foldM (MkMHashMap hm) initial combine
+foldM (UnsafeMkMHashMap _ hm) initial combine
   = MHM.foldM (\x k v -> combine k v x) initial hm
 
 -- | FIXME: doc
@@ -162,7 +216,7 @@ computeOverhead
   -- ^ FIXME: doc
   -> m Double
   -- ^ FIXME: doc
-computeOverhead (MkMHashMap hm) = MHM.computeOverhead hm
+computeOverhead (UnsafeMkMHashMap _ hm) = MHM.computeOverhead hm
 
 -- | FIXME: doc
 freeze
@@ -187,8 +241,24 @@ thaw hm = do
   let fold :: (Monad m) => HM.HashMap k v -> a -> (k -> v -> a -> m a) -> m a
       fold hmap initial combine
         = HM.foldrWithKey (\k v x -> x >>= combine k v) (pure initial) hmap
-  result <- newSized (HM.size hm)
+  result <- newWithCapacity (HM.size hm)
   fold hm () $ \k v () -> insert result k v
   pure result
+
+--------------------------------------------------------------------------------
+
+-- Helper functions
+
+modifySize
+  :: (PrimMonad m)
+  => MHashMap (PrimState m) k v
+  -> (Int -> Int)
+  -> m ()
+modifySize (UnsafeMkMHashMap sr _) f = stToPrim $ do
+  STRef.modifySTRef sr
+    $ \old -> let new = f old
+              in if new < 0
+                 then error "modifySize: assertion violated"
+                 else new
 
 --------------------------------------------------------------------------------

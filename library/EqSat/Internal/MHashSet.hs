@@ -4,7 +4,7 @@
 module EqSat.Internal.MHashSet
   ( MHashSet
   , new
-  , newSized
+  , newWithCapacity
   , delete
   , member
   , insert
@@ -45,7 +45,7 @@ import           Flow                    ((.>))
 -- | FIXME: doc
 newtype MHashSet s k
   = MkMHashSet (MHashMap s k ())
-  deriving (Show)
+  deriving ()
 
 -- | FIXME: doc
 new
@@ -55,13 +55,32 @@ new
 new = MkMHashSet <$> MHashMap.new
 
 -- | FIXME: doc
-newSized
+newWithCapacity
   :: (PrimMonad m)
   => Int
   -- ^ FIXME: doc
   -> m (MHashSet (PrimState m) k)
   -- ^ FIXME: doc
-newSized size = MkMHashSet <$> MHashMap.newSized size
+newWithCapacity capacity = do
+  MkMHashSet <$> MHashMap.newWithCapacity capacity
+
+-- | FIXME: doc
+length
+  :: (PrimMonad m)
+  => MHashSet (PrimState m) k
+  -- ^ FIXME: doc
+  -> m Int
+  -- ^ FIXME: doc
+length (MkMHashSet mhm) = MHashMap.length mhm
+
+-- | FIXME: doc
+null
+  :: (PrimMonad m)
+  => MHashSet (PrimState m) k
+  -- ^ FIXME: doc
+  -> m Bool
+  -- ^ FIXME: doc
+null (MkMHashSet mhm) = MHashMap.null mhm
 
 -- | FIXME: doc
 delete
@@ -159,7 +178,7 @@ thaw
   -> m (MHashSet (PrimState m) k)
   -- ^ FIXME: doc
 thaw hs = do
-  result <- newSized (HashSet.size hs)
+  result <- newWithCapacity (HashSet.size hs)
   HashSet.foldr (\k x -> x >>= \() -> insert result k) (pure ()) hs
   pure result
 
