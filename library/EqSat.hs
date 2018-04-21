@@ -186,14 +186,15 @@ class (IsExpression node expr) => TypeSystem node expr where
     -> PP.Doc PP.AnsiStyle
   showTypeErrorANSI = showTypeError
 
--- | FIXME: doc
+-- | A datatype representing one side of an equation.
 data EquationSide
-  = -- | FIXME: doc
+  = -- | The left-hand side of an equation.
     EquationSideLHS
-  | -- | FIXME: doc
+  | -- | The right-hand side of an equation.
     EquationSideRHS
   deriving (Eq, Ord, Show, Read, Generic)
 
+-- | FIXME: doc
 instance Hashable EquationSide
 
 -- | FIXME: doc
