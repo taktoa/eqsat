@@ -8,6 +8,7 @@ module EqSat.TypedTerm
   , underlyingTerm
   , wholeTermTypingFunction
   , metavariableTypingFunction
+  , freeVars
   ) where
 
 --------------------------------------------------------------------------------
@@ -17,6 +18,7 @@ import           Data.Maybe    (isJust)
 
 import           Flow          ((.>))
 
+import           Data.Set      (Set)
 import qualified Data.Set      as Set
 
 import           EqSat.Term    (Term)
@@ -127,5 +129,16 @@ metavariableTypingFunction
   -> Substitution var ty
   -- ^ The metavariable typing function of the given 'TypedTerm'.
 metavariableTypingFunction = _typedTermVarType
+
+--------------------------------------------------------------------------------
+
+-- | Get the 'Set' of free variables in the given 'TypedTerm'.
+freeVars
+  :: (Ord var)
+  => TypedTerm node var ty
+  -- ^ A typed term.
+  -> Set var
+  -- ^ The set of free variables in the given typed term.
+freeVars = underlyingTerm .> Term.freeVars
 
 --------------------------------------------------------------------------------

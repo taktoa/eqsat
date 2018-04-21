@@ -99,7 +99,7 @@ mapNode f (MkVarTerm  var)           = MkVarTerm var
 mapNode f (MkNodeTerm node children) = Vector.map (mapNode f) children
                                        |> MkNodeTerm (f node)
 
--- | Helper function to get the 'Set' of free variables in the given 'Term'.
+-- | Get the 'Set' of free variables in the given 'Term'.
 freeVars
   :: (Ord var)
   => Term node var
