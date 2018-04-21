@@ -1,8 +1,12 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE LambdaCase    #-}
-{-# LANGUAGE MultiWayIf    #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiWayIf            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 --------------------------------------------------------------------------------
 
@@ -12,6 +16,8 @@ module EqSat.Internal.MGraph
   ) where
 
 --------------------------------------------------------------------------------
+
+import           Control.Monad
 
 import           Control.Monad.Primitive
 
@@ -44,6 +50,11 @@ import qualified EqSat.Internal.MHashSet   as MHashSet
 import           EqSat.Internal.MHashMap   (MHashMap)
 import qualified EqSat.Internal.MHashMap   as MHashMap
 
+import           Data.Vector.Generic       (Mutable, Vector)
+import qualified Data.Vector.Generic       as Vector
+
+import           Flow                      ((.>), (|>))
+
 --------------------------------------------------------------------------------
 
 -- * 'MGraph'
@@ -56,6 +67,44 @@ data MGraph s g v e
     , _mgraphWeightToPairs :: !(MHashMap s e (MHashSet s (v, v)))
     }
   deriving ()
+
+-- | FIXME: doc
+newMGraph
+  :: (PrimMonad m)
+  => m (MGraph (PrimState m) g v e)
+  -- ^ FIXME: doc
+newMGraph = do
+  edgeMap <- MHashMap.new
+  nodeSet <- MHashSet.new
+  wtpMap  <- MHashMap.new
+  pure (UnsafeMkMGraph edgeMap nodeSet wtpMap)
+
+-- | FIXME: doc
+numNodesMGraph
+  :: (PrimMonad m)
+  => MGraph (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> m Int
+  -- ^ FIXME: doc
+numNodesMGraph = _mgraphNodeSet .> MHashSet.length
+
+-- | FIXME: doc
+numEdgesMGraph
+  :: (PrimMonad m)
+  => MGraph (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> m Int
+  -- ^ FIXME: doc
+numEdgesMGraph = _mgraphWeightToPairs .> MHashMap.length
+
+--------------------------------------------------------------------------------
+
+-- * 'SomeMGraph'
+
+-- | FIXME: doc
+data SomeMGraph s v e where
+  MkSomeMGraph :: MGraph s g v e
+               -> SomeMGraph s v e
 
 --------------------------------------------------------------------------------
 
@@ -334,6 +383,11 @@ getEdgesWithWeight graph weight = do
             >>= MHashSet.freeze
   pure (HashSet.map (uncurry (UnsafeMkMEdge graph)) frozen)
 
+--     { _mgraphEdgeMap       :: !(MHashMap s v (MHashMap s v e))
+--     , _mgraphNodeSet       :: !(MHashSet s v)
+--     , _mgraphWeightToPairs :: !(MHashMap s e (MHashSet s (v, v)))
+--     }
+
 -- | FIXME: doc
 getOutgoingEdges
   :: (Eq v, Eq e, Hashable v, Hashable e, PrimMonad m)
@@ -341,11 +395,136 @@ getOutgoingEdges
   -- ^ FIXME: doc
   -> m (HashMap (MEdge (PrimState m) g v e) e)
   -- ^ FIXME: doc
-getOutgoingEdges = undefined
+getOutgoingEdges node = do
+  let graph = graphMNode node
+  fmap (fromMaybe HashMap.empty) $ MaybeT.runMaybeT $ do
+    let source = labelMNode node
+    -- FIXME: if the given node is not valid, maybe we should return Nothing
+    m <- MaybeT (MHashMap.lookup (_mgraphEdgeMap graph) source)
+    MHashMap.foldM m HashMap.empty $ \target weight hm -> do
+      let edge = UnsafeMkMEdge graph source target
+      pure (HashMap.insert edge weight hm)
+
+-- | FIXME: doc
+getNodes
+  :: (Eq v, Hashable v, PrimMonad m)
+  => MGraph (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> m (HashSet v)
+  -- ^ FIXME: doc
+getNodes graph = do
+  MHashSet.freeze (_mgraphNodeSet graph)
+
+-- | FIXME: doc
+getEdges
+  :: (Eq v, Hashable v, PrimMonad m)
+  => MGraph (PrimState m) g v e
+  -- ^ FIXME: doc
+  -> m (HashMap (v, v) e)
+  -- ^ FIXME: doc
+getEdges graph = do
+  MHashMap.foldM (_mgraphEdgeMap graph) HashMap.empty $ \source m r -> do
+    MHashMap.foldM m r
+      $ \target weight -> HashMap.insert (source, target) weight .> pure
 
 --------------------------------------------------------------------------------
 
+-- * Algorithms
 
+-- | A strongly-connected component of a graph.
+type SCC s v e = SomeMGraph s v e
+
+-- | Tarjan's strongly-connected components algorithm.
+tarjanSCC
+  :: forall vec m v e g.
+     ( PrimMonad m, Vector vec (SCC (PrimState m) v e)
+     , Eq v, Eq e, Hashable v, Hashable e
+     )
+  => MNode (PrimState m) g v e
+  -- ^ The root node of the 'MGraph' on which Tarjan's strongly-connected
+  --   components algorithm will be run. This function does not mutate
+  --   the 'MGraph'.
+  -> m (vec (SCC (PrimState m) v e))
+  -- ^ A 'PrimMonad' action returning a vector containing the strongly-connected
+  --   components of the given 'MGraph' in reverse topological order.
+tarjanSCC root = do
+  let graph = graphMNode root
+
+  numNodes <- numNodesMGraph graph
+
+  indexRef   <- stToPrim $ STRef.newSTRef (0 :: Int)
+  stackRef   <- stToPrim $ STRef.newSTRef ([] :: [v])
+  indexMHM   <- MHashMap.newWithCapacity numNodes
+  lowLinkMHM <- MHashMap.newWithCapacity numNodes
+  onStackMHS <- MHashSet.newWithCapacity numNodes
+  resultRef  <- stToPrim $ STRef.newSTRef ([] :: [SCC (PrimState m) v e])
+
+  let modifyIndex :: (Int -> Int) -> m ()
+      modifyIndex f = stToPrim $ STRef.modifySTRef' indexRef f
+  let getIndex :: m Int
+      getIndex = stToPrim $ STRef.readSTRef indexRef
+  let pushStack :: v -> m ()
+      pushStack x = stToPrim $ STRef.modifySTRef' stackRef (x:)
+  let popStack :: m (Maybe v)
+      popStack = stToPrim $ do
+        STRef.readSTRef stackRef
+          >>= (\case []     -> pure Nothing
+                     (x:xs) -> do STRef.writeSTRef stackRef xs
+                                  pure (Just x))
+
+  edges <- HashMap.toList <$> getEdges graph
+
+  let strongConnect :: v -> m ()
+      strongConnect v = do
+        getIndex >>= MHashMap.insert indexMHM   v
+        getIndex >>= MHashMap.insert lowLinkMHM v
+        modifyIndex (+ 1)
+        pushStack v
+        MHashSet.insert onStackMHS v
+        outgoing <- HashMap.keys <$> getOutgoingEdges (UnsafeMkMNode graph v)
+        forM_ outgoing $ \edge -> do
+          let w = labelMNode (targetMEdge edge)
+          wIndexIsDefined <- MHashMap.member indexMHM w
+          wOnStack <- MHashSet.member onStackMHS w
+          if not wIndexIsDefined
+            then (do strongConnect w
+                     llv <- MHashMap.lookup lowLinkMHM v
+                            >>= maybe (fail "lowLink is undefined!") pure
+                     llw <- MHashMap.lookup lowLinkMHM w
+                            >>= maybe (fail "lowLink is undefined!") pure
+                     MHashMap.insert lowLinkMHM v (min llv llw))
+            else (when wOnStack $ do
+                     llv <- MHashMap.lookup lowLinkMHM v
+                            >>= maybe (fail "lowLink is undefined!") pure
+                     iw  <- MHashMap.lookup indexMHM w
+                            >>= maybe (fail "index is undefined!") pure
+                     MHashMap.insert lowLinkMHM v (min llv iw))
+        llv <- MHashMap.lookup lowLinkMHM v
+               >>= maybe (fail "lowLink is undefined!") pure
+        iv  <- MHashMap.lookup indexMHM v
+               >>= maybe (fail "index is undefined!") pure
+        when (llv == iv) $ do
+          scc <- newMGraph
+          let go maybeW = do
+                w <- maybe (fail "stack is empty!") pure maybeW
+                MHashSet.delete onStackMHS w
+                addNode scc w
+                unless (v == w) $ do
+                  popStack >>= go
+          popStack >>= go
+          forM_ edges $ \((src, tgt), weight) -> do
+            valid <- (&&) <$> memberNode scc src <*> memberNode scc tgt
+            when valid $ do
+              void (addEdge scc src tgt weight)
+          stToPrim (STRef.modifySTRef' resultRef (MkSomeMGraph scc :))
+
+  nodes <- HashSet.toList <$> getNodes graph
+  forM_ nodes $ \v -> do
+    visited <- MHashMap.member indexMHM v
+    unless visited (strongConnect v)
+
+  -- FIXME: use an MVector instead of a list for efficiency
+  Vector.fromList <$> stToPrim (STRef.readSTRef resultRef)
 
 --------------------------------------------------------------------------------
 
