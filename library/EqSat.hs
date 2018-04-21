@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures            #-}
 {-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeApplications          #-}
@@ -40,7 +41,8 @@ import qualified Control.Monad.Trans.Class    as MonadTrans
 import           Control.Monad.Trans.Maybe    (MaybeT (MaybeT))
 import qualified Control.Monad.Trans.Maybe    as MaybeT
 
-import           Control.Monad.Except         (MonadError (throwError))
+import           Control.Monad.Except         (ExceptT, MonadError (throwError))
+import qualified Control.Monad.Except         as ExceptT
 
 import           Data.Hashable                (Hashable)
 
@@ -144,7 +146,7 @@ class (IsExpression node expr) => TypeSystem node expr where
   inferType
     :: (Ord var, Hashable var, MonadError (TypeError expr) m)
     => Term node var
-    -> m (TypedTerm var node (Type expr))
+    -> m (TypedTerm node var (Type expr))
 
   -- | Return 'True' if the first given 'Type' is a subtype of the second
   --   given 'Type' in your type system, and return 'False' otherwise.
@@ -161,13 +163,19 @@ class (IsExpression node expr) => TypeSystem node expr where
     -> Type expr
     -> Bool
 
-  -- | Pretty-print a @'TypeError' expr@ as a 'PP.Doc'. This version does not
-  --   allow any annotations.
+  -- FIXME: maybe `isSubtype` should have type
+  --        `(MonadError (TypeError expr) m) => Type expr -> Type expr -> m ()`.
+
+  -- | Pretty-print a @'TypeError' expr@ as a 'PP.Doc'.
+  --   This version does not allow any annotations.
   showTypeError
     :: TypeError expr
     -> PP.Doc ann
 
-  -- | FIXME: doc
+  -- | Pretty-print a @'TypeError' expr@ as a 'PP.Doc'.
+  --   This version allows you to add ANSI color annotations, if you want.
+  --   If you don't want to add ANSI coloring, there is a default definition
+  --   in terms of 'showTypeError'.
   --
   --   Laws:
   --
@@ -179,19 +187,146 @@ class (IsExpression node expr) => TypeSystem node expr where
   showTypeErrorANSI = showTypeError
 
 -- | FIXME: doc
+data EquationSide
+  = -- | FIXME: doc
+    EquationSideLHS
+  | -- | FIXME: doc
+    EquationSideRHS
+  deriving (Eq, Ord, Show, Read, Generic)
+
+instance Hashable EquationSide
+
+-- | FIXME: doc
+data CheckEquationError node var expr
+  = -- | FIXME: doc
+    CheckEquationError_InferenceFailure
+    { _CheckEquationError_side  :: !EquationSide
+    , _CheckEquationError_error :: !(TypeError expr)
+    }
+  | -- | FIXME: doc
+    CheckEquationError_OutOfScope
+    { _CheckEquationError_var :: !var
+    , _CheckEquationError_lhs :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_rhs :: !(TypedTerm node var (Type expr))
+    }
+  | -- | FIXME: doc
+    CheckEquationError_MetaVarNotSubtype
+    { _CheckEquationError_var        :: !var
+    , _CheckEquationError_lhs        :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_rhs        :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_lhsVarType :: !(Type expr)
+    , _CheckEquationError_rhsVarType :: !(Type expr)
+    }
+  | -- | FIXME: doc
+    CheckEquationError_OverallNotEqual
+    { _CheckEquationError_lhs     :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_rhs     :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_lhsType :: !(Type expr)
+    , _CheckEquationError_rhsType :: !(Type expr)
+    }
+  | -- | FIXME: doc
+    CheckEquationError_Impossible
+    { _CheckEquationError_message :: !(PP.Doc Void)
+    }
+  deriving ()
+
+-- | FIXME: doc
+data TypedEquation node var ty
+  = UnsafeMkTypedEquation
+    { _typedEquationUnderlying :: !(Equation node var)
+    , _typedEquationType       :: !ty
+    , _typedEquationVarTypes   :: !(var -> Maybe ty)
+    }
+  deriving ()
+
+-- | FIXME: doc
+mapError
+  :: (MonadError e2 m)
+  => (e1 -> e2)
+  -- ^ FIXME: doc
+  -> ExceptT e1 m a
+  -- ^ FIXME: doc
+  -> m a
+  -- ^ FIXME: doc
+mapError f action = do
+  result <- ExceptT.runExceptT action
+  case result of
+    Left  e -> throwError (f e)
+    Right r -> pure r
+
+-- | FIXME: doc
 checkEquation
   :: ( Ord var, Hashable var
      , TypeSystem node expr
-     , MonadError (TypeError expr) m
+     , MonadError (CheckEquationError node var expr) m
      )
   => (Term node var, Term node var)
-  -> m (Equation node var)
+  -- ^ FIXME: doc
+  -> m (TypedEquation node var (Type expr))
+  -- ^ FIXME: doc
 checkEquation (lhs, rhs) = do
-  lhsTy <- inferType lhs
-  rhsTy <- inferType rhs
-  -- unless (isSubtype p rhsTy lhsTy) $ do
-  --   undefined
-  undefined
+  let throwImpossible = CheckEquationError_Impossible .> throwError
+
+  typedLHS <- inferType lhs
+              |> mapError (CheckEquationError_InferenceFailure EquationSideLHS)
+  typedRHS <- inferType rhs
+              |> mapError (CheckEquationError_InferenceFailure EquationSideRHS)
+
+  let lhsMTF  = TypedTerm.metavariableTypingFunction typedLHS
+  let rhsMTF  = TypedTerm.metavariableTypingFunction typedRHS
+  let lhsWTTF = TypedTerm.wholeTermTypingFunction    typedLHS
+  let rhsWTTF = TypedTerm.wholeTermTypingFunction    typedRHS
+  let lhsFVs  = TypedTerm.freeVars                   typedLHS
+  let rhsFVs  = TypedTerm.freeVars                   typedRHS
+
+  forM_ rhsFVs $ \usedVar -> do
+    when (usedVar `Set.notMember` lhsFVs) $ do
+      let err = CheckEquationError_OutOfScope
+                { _CheckEquationError_var = usedVar
+                , _CheckEquationError_lhs = typedLHS
+                , _CheckEquationError_rhs = typedRHS
+                }
+      throwError err
+
+    let mtfFailure = throwImpossible "metavariable typing function failure"
+
+    lhsMetaVarType <- maybe mtfFailure pure (lhsMTF usedVar)
+    rhsMetaVarType <- maybe mtfFailure pure (rhsMTF usedVar)
+
+    unless (rhsMetaVarType `isSubtype` lhsMetaVarType) $ do
+      let err = CheckEquationError_MetaVarNotSubtype
+                { _CheckEquationError_var        = usedVar
+                , _CheckEquationError_lhs        = typedLHS
+                , _CheckEquationError_rhs        = typedRHS
+                , _CheckEquationError_lhsVarType = lhsMetaVarType
+                , _CheckEquationError_rhsVarType = rhsMetaVarType
+                }
+      throwError err
+
+  let wttfFailure = throwImpossible "whole-term typing function failure"
+
+  lhsType <- maybe wttfFailure pure (lhsWTTF rhsMTF) -- intentional
+  rhsType <- maybe wttfFailure pure (rhsWTTF rhsMTF)
+
+  unless ((lhsType `isSubtype` rhsType) && (rhsType `isSubtype` lhsType)) $ do
+    let err = CheckEquationError_OverallNotEqual
+              { _CheckEquationError_lhs     = typedLHS
+              , _CheckEquationError_rhs     = typedRHS
+              , _CheckEquationError_lhsType = lhsType
+              , _CheckEquationError_rhsType = rhsType
+              }
+    throwError err
+
+  equation <- Equation.make (lhs, rhs)
+              |> maybe (throwImpossible "equation creation failure") pure
+
+  let result = UnsafeMkTypedEquation
+               { _typedEquationUnderlying = equation
+               , _typedEquationType       = rhsType
+               , _typedEquationVarTypes   = rhsMTF
+               }
+
+  pure result
 
 --------------------------------------------------------------------------------
 
