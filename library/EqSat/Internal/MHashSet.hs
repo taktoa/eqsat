@@ -5,15 +5,18 @@ module EqSat.Internal.MHashSet
   ( MHashSet
   , new
   , newWithCapacity
+  , length
+  , null
+  , computeOverhead
   , delete
   , member
   , insert
   , mapM_
   , forM_
   , foldM
-  , computeOverhead
   , freeze
   , thaw
+  , mergeInto
   ) where
 
 --------------------------------------------------------------------------------
@@ -42,10 +45,16 @@ import           Flow                    ((.>))
 
 --------------------------------------------------------------------------------
 
+-- * 'MHashSet'
+
 -- | FIXME: doc
 newtype MHashSet s k
   = MkMHashSet (MHashMap s k ())
   deriving ()
+
+--------------------------------------------------------------------------------
+
+-- ** Creation
 
 -- | FIXME: doc
 new
@@ -64,6 +73,10 @@ newWithCapacity
 newWithCapacity capacity = do
   MkMHashSet <$> MHashMap.newWithCapacity capacity
 
+--------------------------------------------------------------------------------
+
+-- ** Getters
+
 -- | FIXME: doc
 length
   :: (PrimMonad m)
@@ -81,6 +94,19 @@ null
   -> m Bool
   -- ^ FIXME: doc
 null (MkMHashSet mhm) = MHashMap.null mhm
+
+-- | FIXME: doc
+computeOverhead
+  :: (PrimMonad m)
+  => MHashSet (PrimState m) k
+  -- ^ FIXME: doc
+  -> m Double
+  -- ^ FIXME: doc
+computeOverhead (MkMHashSet hm) = MHashMap.computeOverhead hm
+
+--------------------------------------------------------------------------------
+
+-- ** Mutation
 
 -- | FIXME: doc
 delete
@@ -115,6 +141,10 @@ insert
   -> m ()
   -- ^ FIXME: doc
 insert (MkMHashSet hm) k = MHashMap.insert hm k ()
+
+--------------------------------------------------------------------------------
+
+-- ** Iteration
 
 -- | FIXME: doc
 mapM_
@@ -152,14 +182,9 @@ foldM
 foldM (MkMHashSet hm) initial combiner
   = MHashMap.foldM hm initial (\k _ -> combiner k)
 
--- | FIXME: doc
-computeOverhead
-  :: (PrimMonad m)
-  => MHashSet (PrimState m) k
-  -- ^ FIXME: doc
-  -> m Double
-  -- ^ FIXME: doc
-computeOverhead (MkMHashSet hm) = MHashMap.computeOverhead hm
+--------------------------------------------------------------------------------
+
+-- ** Freezing and thawing
 
 -- | FIXME: doc
 freeze
@@ -181,5 +206,21 @@ thaw hs = do
   result <- newWithCapacity (HashSet.size hs)
   HashSet.foldr (\k x -> x >>= \() -> insert result k) (pure ()) hs
   pure result
+
+--------------------------------------------------------------------------------
+
+-- ** Other useful functions
+
+-- | FIXME: doc
+mergeInto
+  :: (Eq k, Hashable k, PrimMonad m)
+  => MHashSet (PrimState m) k
+  -- ^ FIXME: doc
+  -> MHashSet (PrimState m) k
+  -- ^ FIXME: doc
+  -> m ()
+  -- ^ FIXME: doc
+mergeInto m1 m2 = do
+  forM_ m1 (insert m2)
 
 --------------------------------------------------------------------------------
