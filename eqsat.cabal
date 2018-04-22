@@ -82,6 +82,7 @@ library
                         , EqSat.Domain
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
+                        , EqSat.Errors.CheckEquationError
                         , EqSat.Internal.MHashSet
                         , EqSat.Internal.MHashMap
                         , EqSat.Internal.MBitmap

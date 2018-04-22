@@ -28,155 +28,117 @@ import           Control.Exception
                  (AssertionFailed, Exception, SomeException, assert, catch,
                  throw, throwIO)
 
-import           Control.Applicative          (empty)
+import           Control.Applicative             (empty)
 
 import           Control.Monad
 
 import           Control.Monad.Primitive
-import           Control.Monad.ST             (ST, runST)
+import           Control.Monad.ST                (ST, runST)
 
-import           Control.Monad.IO.Class       (MonadIO (liftIO))
-import           Control.Monad.Trans.Class    (MonadTrans (lift))
-import qualified Control.Monad.Trans.Class    as MonadTrans
-import           Control.Monad.Trans.Maybe    (MaybeT (MaybeT))
-import qualified Control.Monad.Trans.Maybe    as MaybeT
-import           Control.Monad.Trans.Reader   (ReaderT (ReaderT))
-import qualified Control.Monad.Trans.Reader   as ReaderT
+import           Control.Monad.IO.Class          (MonadIO (liftIO))
+import           Control.Monad.Trans.Class       (MonadTrans (lift))
+import qualified Control.Monad.Trans.Class       as MonadTrans
+import           Control.Monad.Trans.Maybe       (MaybeT (MaybeT))
+import qualified Control.Monad.Trans.Maybe       as MaybeT
+import           Control.Monad.Trans.Reader      (ReaderT (ReaderT))
+import qualified Control.Monad.Trans.Reader      as ReaderT
 
-import           Control.Monad.Except         (ExceptT, MonadError (throwError))
-import qualified Control.Monad.Except         as ExceptT
+import           Control.Monad.Except
+                 (ExceptT, MonadError (throwError))
+import qualified Control.Monad.Except            as ExceptT
 
-import           Data.Hashable                (Hashable)
+import           Data.Hashable                   (Hashable)
 
-import qualified Data.HashMap.Strict          as HM
-import qualified Data.HashSet                 as HS
+import qualified Data.HashMap.Strict             as HM
+import qualified Data.HashSet                    as HS
 
-import qualified Data.Graph.Immutable         as Graph
-import qualified Data.Graph.Mutable           as MGraph
-import           Data.Graph.Types             (Graph, MGraph, SomeGraph, Vertex)
-import qualified Data.Graph.Types             as Graph
-import qualified Data.Graph.Types             as MGraph
-import qualified Data.Graph.Types.Internal    as Graph.Internal
+import qualified Data.Graph.Immutable            as Graph
+import qualified Data.Graph.Mutable              as MGraph
+import           Data.Graph.Types
+                 (Graph, MGraph, SomeGraph, Vertex)
+import qualified Data.Graph.Types                as Graph
+import qualified Data.Graph.Types                as MGraph
+import qualified Data.Graph.Types.Internal       as Graph.Internal
 
-import           Data.Partition               (Partition)
-import qualified Data.Partition               as Partition
+import           Data.Partition                  (Partition)
+import qualified Data.Partition                  as Partition
 
-import           Data.STRef                   (STRef)
-import qualified Data.STRef                   as STRef
+import           Data.STRef                      (STRef)
+import qualified Data.STRef                      as STRef
 
 import           Data.Maybe
-import           Data.Ord                     (comparing)
+import           Data.Ord                        (comparing)
 
-import           Data.Foldable                (asum)
-import           Data.List                    (sortBy)
+import           Data.Foldable                   (asum)
+import           Data.List                       (sortBy)
 
-import           Data.Map.Strict              (Map)
-import qualified Data.Map.Strict              as Map
+import           Data.Map.Strict                 (Map)
+import qualified Data.Map.Strict                 as Map
 
-import           Data.Set                     (Set)
-import qualified Data.Set                     as Set
+import           Data.Set                        (Set)
+import qualified Data.Set                        as Set
 
-import           Data.Word                    (Word16, Word32)
+import           Data.Word                       (Word16, Word32)
 
-import           Data.Unique                  (Unique)
-import qualified Data.Unique                  as Unique
+import           Data.Unique                     (Unique)
+import qualified Data.Unique                     as Unique
 
-import           Data.Vector                  (Vector)
-import qualified Data.Vector                  as Vector
+import           Data.Vector                     (Vector)
+import qualified Data.Vector                     as Vector
 
-import           Data.Void                    (Void, absurd)
+import           Data.Void                       (Void, absurd)
 
-import           Data.Proxy                   (Proxy (Proxy))
+import           Data.Proxy                      (Proxy (Proxy))
 
 import           Data.SBV
                  (SBV, SInteger, Symbolic, (.<), (.<=), (.==))
-import qualified Data.SBV                     as SBV
-import qualified Data.SBV.Internals           as SBV.Internals
+import qualified Data.SBV                        as SBV
+import qualified Data.SBV.Internals              as SBV.Internals
 
 import qualified EqSat.Internal.SBV
 
-import           Flow                         ((.>), (|>))
+import           Flow                            ((.>), (|>))
 
-import           GHC.Generics                 (Generic)
+import           GHC.Generics                    (Generic)
 
-import           EqSat.Internal.MHashMap      (MHashMap)
-import qualified EqSat.Internal.MHashMap      as MHashMap
+import           EqSat.Internal.MHashMap         (MHashMap)
+import qualified EqSat.Internal.MHashMap         as MHashMap
 
-import           EqSat.Internal.MHashSet      (MHashSet)
-import qualified EqSat.Internal.MHashSet      as MHashSet
+import           EqSat.Internal.MHashSet         (MHashSet)
+import qualified EqSat.Internal.MHashSet         as MHashSet
 
-import           EqSat.Variable               (Variable)
-import qualified EqSat.Variable               as Variable
+import           EqSat.Variable                  (Variable)
+import qualified EqSat.Variable                  as Variable
 
 import           EqSat.Term
                  (ClosedTerm, GTerm, OpenTerm, TTerm,
                  Term (MkNodeTerm, MkRefTerm, MkVarTerm))
-import qualified EqSat.Term                   as Term
+import qualified EqSat.Term                      as Term
 
 import           EqSat.TypedTerm
                  (Substitution, TypedGTerm, TypedTTerm, TypedTerm)
-import qualified EqSat.TypedTerm              as TypedTerm
+import qualified EqSat.TypedTerm                 as TypedTerm
 
-import           EqSat.Equation               (Equation)
-import qualified EqSat.Equation               as Equation
+import           EqSat.Equation                  (Equation)
+import qualified EqSat.Equation                  as Equation
 
-import           EqSat.Domain                 (Domain)
+import           EqSat.Domain                    (Domain)
 
 import           EqSat.IsExpression
                  (IsExpression (exprToGTerm, gtermToExpr))
 
 import           EqSat.TypeSystem
                  (TypeSystem (Type, TypeError, inferType, isSubtype))
-import qualified EqSat.TypeSystem             as TypeSystem
+import qualified EqSat.TypeSystem                as TypeSystem
 
-import qualified EqSat.Internal.PrettyPrinter as PP
+import           EqSat.Errors.CheckEquationError
+                 (CheckEquationError,
+                 EquationSide (EquationSideLHS, EquationSideRHS))
+import qualified EqSat.Errors.CheckEquationError as CheckEquationError
+
+import qualified EqSat.Internal.PrettyPrinter    as PP
 
 --------------------------------------------------------------------------------
-
--- | A datatype representing one side of an equation.
-data EquationSide
-  = -- | The left-hand side of an equation.
-    EquationSideLHS
-  | -- | The right-hand side of an equation.
-    EquationSideRHS
-  deriving (Eq, Ord, Show, Read, Generic)
-
--- | FIXME: doc
-instance Hashable EquationSide
-
--- | FIXME: doc
-data CheckEquationError node var expr
-  = -- | FIXME: doc
-    CheckEquationError_InferenceFailure
-    { _CheckEquationError_side  :: !EquationSide
-    , _CheckEquationError_error :: !(TypeError expr)
-    }
-  | -- | FIXME: doc
-    CheckEquationError_OutOfScope
-    { _CheckEquationError_var :: !var
-    , _CheckEquationError_lhs :: !(TypedTTerm node var (Type expr))
-    , _CheckEquationError_rhs :: !(TypedGTerm node var (Type expr))
-    }
-  | -- | FIXME: doc
-    CheckEquationError_MetaVarNotSubtype
-    { _CheckEquationError_var        :: !var
-    , _CheckEquationError_lhs        :: !(TypedTTerm node var (Type expr))
-    , _CheckEquationError_rhs        :: !(TypedGTerm node var (Type expr))
-    , _CheckEquationError_lhsVarType :: !(Type expr)
-    , _CheckEquationError_rhsVarType :: !(Type expr)
-    }
-  | -- | FIXME: doc
-    CheckEquationError_OverallNotEqual
-    { _CheckEquationError_lhs     :: !(TypedTTerm node var (Type expr))
-    , _CheckEquationError_rhs     :: !(TypedGTerm node var (Type expr))
-    , _CheckEquationError_lhsType :: !(Type expr)
-    , _CheckEquationError_rhsType :: !(Type expr)
-    }
-  | -- | FIXME: doc
-    CheckEquationError_Impossible
-    { _CheckEquationError_message :: !(PP.Doc Void)
-    }
-  deriving ()
 
 -- | FIXME: doc
 data TypedEquation node var ty
@@ -204,7 +166,8 @@ mapError f action = do
 
 -- | FIXME: doc
 checkEquation
-  :: ( Ord var, Hashable var
+  :: forall expr m node var.
+     ( Ord var, Hashable var
      , TypeSystem node expr
      , MonadError (CheckEquationError node var expr) m
      )
@@ -213,12 +176,15 @@ checkEquation
   -> m (TypedEquation node var (Type expr))
   -- ^ FIXME: doc
 checkEquation (lhs, rhs) = do
-  let throwImpossible = CheckEquationError_Impossible .> throwError
+  let throwImpossible :: PP.Doc Void -> m a
+      throwImpossible = CheckEquationError.Impossible lhs rhs .> throwError
 
   typedLHS <- inferType lhs
-              |> mapError (CheckEquationError_InferenceFailure EquationSideLHS)
+              |> (mapError
+                  (CheckEquationError.InferenceFailure lhs rhs EquationSideLHS))
   typedRHS <- inferType rhs
-              |> mapError (CheckEquationError_InferenceFailure EquationSideRHS)
+              |> (mapError
+                  (CheckEquationError.InferenceFailure lhs rhs EquationSideRHS))
 
   let lhsMTF  = TypedTerm.metavariableTypingFunction typedLHS
   let rhsMTF  = TypedTerm.metavariableTypingFunction typedRHS
@@ -229,39 +195,39 @@ checkEquation (lhs, rhs) = do
 
   forM_ rhsFVs $ \usedVar -> do
     when (usedVar `Set.notMember` lhsFVs) $ do
-      let err = CheckEquationError_OutOfScope
-                { _CheckEquationError_var = usedVar
-                , _CheckEquationError_lhs = typedLHS
-                , _CheckEquationError_rhs = typedRHS
+      let err = CheckEquationError.OutOfScope
+                { CheckEquationError._OutOfScope_var = usedVar
+                , CheckEquationError._OutOfScope_lhs = typedLHS
+                , CheckEquationError._OutOfScope_rhs = typedRHS
                 }
       throwError err
 
     let mtfFailure = throwImpossible "metavariable typing function failure"
 
-    lhsMetaVarType <- maybe mtfFailure pure (lhsMTF usedVar)
-    rhsMetaVarType <- maybe mtfFailure pure (rhsMTF usedVar)
+    lhsVarType <- maybe mtfFailure pure (lhsMTF usedVar)
+    rhsVarType <- maybe mtfFailure pure (rhsMTF usedVar)
 
-    unless (rhsMetaVarType `isSubtype` lhsMetaVarType) $ do
-      let err = CheckEquationError_MetaVarNotSubtype
-                { _CheckEquationError_var        = usedVar
-                , _CheckEquationError_lhs        = typedLHS
-                , _CheckEquationError_rhs        = typedRHS
-                , _CheckEquationError_lhsVarType = lhsMetaVarType
-                , _CheckEquationError_rhsVarType = rhsMetaVarType
+    unless (rhsVarType `isSubtype` lhsVarType) $ do
+      let err = CheckEquationError.MetaVarNotSubtype
+                { CheckEquationError._MetaVarNotSubtype_var        = usedVar
+                , CheckEquationError._MetaVarNotSubtype_lhs        = typedLHS
+                , CheckEquationError._MetaVarNotSubtype_rhs        = typedRHS
+                , CheckEquationError._MetaVarNotSubtype_lhsVarType = lhsVarType
+                , CheckEquationError._MetaVarNotSubtype_rhsVarType = rhsVarType
                 }
       throwError err
 
   let wttfFailure = throwImpossible "whole-term typing function failure"
 
-  lhsType <- maybe wttfFailure pure (lhsWTTF rhsMTF) -- intentional
+  lhsType <- maybe wttfFailure pure (lhsWTTF rhsMTF) -- not a typo
   rhsType <- maybe wttfFailure pure (rhsWTTF rhsMTF)
 
   unless ((lhsType `isSubtype` rhsType) && (rhsType `isSubtype` lhsType)) $ do
-    let err = CheckEquationError_OverallNotEqual
-              { _CheckEquationError_lhs     = typedLHS
-              , _CheckEquationError_rhs     = typedRHS
-              , _CheckEquationError_lhsType = lhsType
-              , _CheckEquationError_rhsType = rhsType
+    let err = CheckEquationError.OverallNotEqual
+              { CheckEquationError._OverallNotEqual_lhs     = typedLHS
+              , CheckEquationError._OverallNotEqual_rhs     = typedRHS
+              , CheckEquationError._OverallNotEqual_lhsType = lhsType
+              , CheckEquationError._OverallNotEqual_rhsType = rhsType
               }
     throwError err
 
