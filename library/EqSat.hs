@@ -40,6 +40,8 @@ import           Control.Monad.Trans.Class    (MonadTrans (lift))
 import qualified Control.Monad.Trans.Class    as MonadTrans
 import           Control.Monad.Trans.Maybe    (MaybeT (MaybeT))
 import qualified Control.Monad.Trans.Maybe    as MaybeT
+import           Control.Monad.Trans.Reader   (ReaderT (ReaderT))
+import qualified Control.Monad.Trans.Reader   as ReaderT
 
 import           Control.Monad.Except         (ExceptT, MonadError (throwError))
 import qualified Control.Monad.Except         as ExceptT
@@ -90,6 +92,8 @@ import           Data.SBV
                  (SBV, SInteger, Symbolic, (.<), (.<=), (.==))
 import qualified Data.SBV                     as SBV
 import qualified Data.SBV.Internals           as SBV.Internals
+
+import qualified EqSat.Internal.SBV
 
 import           Flow                         ((.>), (|>))
 
@@ -635,39 +639,70 @@ withSomeEPEG (MkSomeEPEG epeg) f = f epeg
 
 --------------------------------------------------------------------------------
 
--- | The type of global symbolic performance heuristics.
-newtype GlobalSymbolicPerformanceHeuristic domain node
-  = MkGlobalSymbolicPerformanceHeuristic
-    (forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
+-- | FIXME: doc
+class Heuristic heuristic where
+  data HeuristicConfig heuristic :: *
+
+  -- | FIXME: doc
+  defaultHeuristicConfig
+    :: (MonadIO m)
+    => proxy heuristic
+    -- ^ FIXME: doc
+    -> m (HeuristicConfig heuristic)
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  runHeuristic
+    :: (MonadIO m)
+    => HeuristicConfig heuristic
+    -- ^ FIXME: doc
+    -> EPEG g node
+    -- ^ FIXME: doc
+    -> heuristic node
+    -- ^ FIXME: doc
+    -> m (Maybe (SomePEG node))
+    -- ^ FIXME: doc
+
+--------------------------------------------------------------------------------
+
+-- | The type of symbolic performance heuristics.
+data SymbolicHeuristic domain node
+  = MkSymbolicHeuristic
+    { _SymbolicHeuristic_valuation
+      :: !(forall g. EPEG g (node, SBV Bool) -> Symbolic (SBV domain))
+    -- , _SymbolicHeuristic_validation
+    --   :: !(SomePEG node -> IO Bool)
+    }
   deriving ()
 
 -- | FIXME: doc
-applyGlobalSymbolicPerformanceHeuristic
-  :: GlobalSymbolicPerformanceHeuristic domain node
+applySymbolicHeuristic
+  :: SymbolicHeuristic domain node
   -- ^ FIXME: doc
   -> EPEG g (node, SBV Bool)
   -- ^ FIXME: doc
   -> Symbolic (SBV domain)
   -- ^ FIXME: doc
-applyGlobalSymbolicPerformanceHeuristic
-  = (\case (MkGlobalSymbolicPerformanceHeuristic f) -> f)
+applySymbolicHeuristic (MkSymbolicHeuristic f) = f
 
--- | Optimize the given 'GlobalSymbolicPerformanceHeuristic' on the
+-- | Optimize the given 'SymbolicHeuristic' on the
 --   given 'EPEG' via pseudo-boolean integer programming using @sbv@ / @Z3@'s
 --   optimization support.
 --
 --   If the solver terminates successfully, a 'SomePEG' representing the
 --   best selected sub-'PEG' is returned.
-runGlobalSymbolicPerformanceHeuristic
+runSymbolicHeuristic
   :: forall node domain m g.
      (MonadIO m, Domain domain)
-  => EPEG g node
+  => SBV.SMTConfig
   -- ^ FIXME: doc
-  -> GlobalSymbolicPerformanceHeuristic domain node
+  -> EPEG g node
+  -- ^ FIXME: doc
+  -> SymbolicHeuristic domain node
   -- ^ FIXME: doc
   -> m (Maybe (SomePEG node))
   -- ^ FIXME: doc
-runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
+runSymbolicHeuristic smtCfg epeg heuristic = MaybeT.runMaybeT $ do
   let classesSet :: Set (Set (Vertex g))
       classesSet = epegClasses epeg
 
@@ -677,28 +712,37 @@ runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
                 |> zip [0..]
                 |> Vector.fromList
 
-  optimizeResult <- liftIO $ SBV.optimize SBV.Lexicographic $ do
-    predicates <- mconcat . Vector.toList <$> do
-      Vector.forM classes $ \(i, cls) -> do
-        let n = Vector.length cls
-        when (toInteger n > toInteger (maxBound :: Word16)) $ do
-          error "Size of equivalence class is too large!"
-        var <- SBV.sWord16 (show i)
-        -- SBV.constrain (0 .<= var)
-        SBV.constrain (var .< fromIntegral n)
-        let vec = Vector.fromList (zip ([0..] :: [Int]) (Vector.toList cls))
-        Vector.forM vec $ \(j, vertex) -> do
-          pure (vertex, var .== fromIntegral j)
-    let predMap = HM.fromList (Vector.toList predicates)
-    peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
-      case HM.lookup vertex predMap of
-        Just b  -> pure (node, b)
-        Nothing -> error "this should never happen"
-    goal <- applyGlobalSymbolicPerformanceHeuristic heuristic
-            $ MkEPEG peg (epegEqRelation epeg)
-    SBV.maximize "heuristic" goal
+  -- let isValid :: SomePEG node -> m Bool
+  --     isValid = _SymbolicHeuristic_validation heuristic .> liftIO
 
-  (SBV.LexicographicResult result) <- pure optimizeResult
+  let goal :: () -- FIXME: validation loop
+           -> Symbolic ()
+      goal constraints = do
+        predicates <- mconcat . Vector.toList <$> do
+          Vector.forM classes $ \(i, cls) -> do
+            let n = Vector.length cls
+            when (toInteger n > toInteger (maxBound :: Word16)) $ do
+              error "Size of equivalence class is too large!"
+            var <- SBV.sWord16 (show i)
+            SBV.constrain (0 .<= var)
+            SBV.constrain (var .< fromIntegral n)
+            let vec = zip ([0..] :: [Int]) (Vector.toList cls)
+                      |> Vector.fromList
+            Vector.forM vec $ \(j, vertex) -> do
+              pure (vertex, var .== fromIntegral j)
+        let predMap = HM.fromList (Vector.toList predicates)
+        peg <- traversePEG (epegPEG epeg) $ \vertex node -> do
+          case HM.lookup vertex predMap of
+            Just b  -> pure (node, b)
+            Nothing -> error "this should never happen"
+        g <- applySymbolicHeuristic heuristic
+             $ MkEPEG peg (epegEqRelation epeg)
+        SBV.maximize "heuristic" g
+
+  result <- do
+    liftIO (SBV.optimizeWith smtCfg SBV.Lexicographic (goal ()))
+      >>= (\case (SBV.LexicographicResult r) -> pure r
+                 _                           -> fail "optimize failed")
 
   let getValue :: Int -> MaybeT m Word32
       getValue i = SBV.getModelValue (show i) result |> pure |> MaybeT
@@ -737,23 +781,57 @@ runGlobalSymbolicPerformanceHeuristic epeg heuristic = MaybeT.runMaybeT $ do
   --   SBV.Satisfiable
   undefined
 
+-- | FIXME: doc
+instance (Domain domain) => Heuristic (SymbolicHeuristic domain) where
+  data HeuristicConfig (SymbolicHeuristic domain)
+    = MkSymbolicHeuristicConfig
+      { _SymbolicHeuristicConfig_smtConfig :: SBV.SMTConfig
+      }
+  defaultHeuristicConfig _ = do
+    smtConfig <- EqSat.Internal.SBV.smtConfig
+    pure (MkSymbolicHeuristicConfig smtConfig)
+  runHeuristic cfg epeg h = do
+    let smtCfg = _SymbolicHeuristicConfig_smtConfig cfg
+    runSymbolicHeuristic smtCfg epeg h
+
 --------------------------------------------------------------------------------
 
--- | FIXME: doc
-class Heuristic heuristic where
-  -- | FIXME: doc
-  runHeuristic
-    :: (MonadIO m)
-    => EPEG g node
-    -- ^ FIXME: doc
-    -> heuristic node
-    -- ^ FIXME: doc
-    -> m (Maybe (SomePEG node))
-    -- ^ FIXME: doc
+-- | The type of linear performance heuristics.
+newtype LinearHeuristic domain node
+  = MkLinearHeuristic
+    (node -> domain)
+  deriving ()
 
 -- | FIXME: doc
-instance (Domain d) => Heuristic (GlobalSymbolicPerformanceHeuristic d) where
-  runHeuristic = runGlobalSymbolicPerformanceHeuristic
+applyLinearHeuristic
+  :: LinearHeuristic domain node
+  -- ^ FIXME: doc
+  -> node
+  -- ^ FIXME: doc
+  -> domain
+  -- ^ FIXME: doc
+applyLinearHeuristic (MkLinearHeuristic f) = f
+
+-- | FIXME: doc
+runLinearHeuristic
+  :: forall node domain m g.
+     (MonadIO m, Domain domain)
+  => EPEG g node
+  -- ^ FIXME: doc
+  -> LinearHeuristic domain node
+  -- ^ FIXME: doc
+  -> m (Maybe (SomePEG node))
+  -- ^ FIXME: doc
+runLinearHeuristic = undefined
+
+-- | FIXME: doc
+instance (Domain domain) => Heuristic (LinearHeuristic domain) where
+  data HeuristicConfig (LinearHeuristic domain)
+    = MkLinearHeuristicConfig
+  defaultHeuristicConfig _ = do
+    pure MkLinearHeuristicConfig
+  runHeuristic cfg epeg h = do
+    runLinearHeuristic epeg h
 
 --------------------------------------------------------------------------------
 
@@ -821,7 +899,8 @@ selectBest
   -> m (SomePEG node)
   -- ^ FIXME: doc
 selectBest heuristic epeg = do
-  maybeResult <- runHeuristic epeg heuristic
+  cfg <- defaultHeuristicConfig Proxy
+  maybeResult <- runHeuristic cfg epeg heuristic
   case maybeResult of
     Just r  -> pure r
     Nothing -> fail "DEBUG: selectBest failed"

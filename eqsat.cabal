@@ -88,6 +88,7 @@ library
                         , EqSat.Internal.GraphMatching
                         , EqSat.Internal.Matrix
                         , EqSat.Internal.PrettyPrinter
+                        , EqSat.Internal.SBV
     default-language:     Haskell2010
     -- FIXME: add other-extensions list
     -- if impl(ghc >= 8.0)

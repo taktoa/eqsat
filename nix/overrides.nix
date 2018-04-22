@@ -29,6 +29,14 @@ with pkgs.haskell.lib;
     dontCheck (appendPatch unpatchedSBV ./patches/sbv.patch));
 
   eqsat = (
-    with { eqsatSource = pkgs.lib.cleanSource ../.; };
-    self.callCabal2nix "eqsat" eqsatSource {});
+    with rec {
+      eqsatSource = pkgs.lib.cleanSource ../.;
+      eqsatBasic = self.callCabal2nix "eqsat" eqsatSource {};
+    };
+    overrideCabal eqsatBasic (old: {
+      preConfigure = (old.preConfigure or "") + ''
+        echo "#define SMT_Z3_PATH \"${pkgs.z3}/bin/z3\"" \
+             > library/EqSat/Internal/SBVDefines.hs
+      '';
+    }));
 }
