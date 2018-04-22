@@ -45,6 +45,8 @@ import           Flow           ((|>))
 
 import           EqSat.Variable (Variable)
 
+import           Refined        (NonNegative, Refined)
+
 --------------------------------------------------------------------------------
 
 data TermRepr
@@ -61,7 +63,7 @@ type ReprT = 'TermReprT
 --   with and without metasyntactic variables.
 data Term (repr :: TermRepr) node var where
   -- | A @ref@ node allows for observable sharing.
-  MkRefTerm  :: !Int
+  MkRefTerm  :: !(Refined NonNegative Int)
              -> Term 'TermReprG node var
   -- | A @var@ node allows for metasyntactic variables.
   MkVarTerm  :: !var

@@ -58,6 +58,7 @@ library
                         , primitive                   >= 0.6   && < 0.7
                         , QuickCheck                  >= 2.9   && < 2.10
                         , quickcheck-instances        >= 0.3   && < 0.4
+                        , refined                     >= 0.1   && < 0.2
                         , sbv                         >= 7.5   && < 7.7
                         , smallcheck                  >= 1.1   && < 1.2
                         , system-filepath             >= 0.4   && < 0.5
@@ -141,6 +142,7 @@ test-suite tests
                         , primitive                   >= 0.6   && < 0.7
                         , QuickCheck                  >= 2.9   && < 2.10
                         , quickcheck-instances        >= 0.3   && < 0.4
+                        , refined                     >= 0.1   && < 0.2
                         , sbv                         >= 7.5   && < 7.7
                         , smallcheck                  >= 1.1   && < 1.2
                         , system-filepath             >= 0.4   && < 0.5
