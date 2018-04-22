@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 --------------------------------------------------------------------------------
 
@@ -42,6 +43,7 @@ import qualified Hedgehog.Gen                           as Gen
 import qualified Hedgehog.Range                         as Range
 
 import qualified EqSat.Internal.MBitmap.Gen             as Gen
+import qualified EqSat.Internal.MGraph.Gen              as Gen
 import qualified EqSat.Tests.Gen.Misc                   as Gen
 
 import           Test.Tasty                             (TestName, TestTree)
@@ -62,15 +64,32 @@ import qualified Control.Monad.Trans.Reader             as ReaderT
 
 import           Control.Monad.Trans.Class              (MonadTrans (lift))
 
+import           Data.List                              (sort)
+
 import           Data.Text                              (Text)
 import qualified Data.Text                              as Text
 
 import           Data.Vector                            (Vector)
 import qualified Data.Vector                            as Vector
 
+import qualified Data.Graph                             as Graph
+import qualified Data.Tree                              as Tree
+
+import           Data.IntMap                            (IntMap)
+import qualified Data.IntMap                            as IntMap
+
+import           Data.HashSet                           (HashSet)
+import qualified Data.HashSet                           as HashSet
+
+import           Data.HashMap.Strict                    (HashMap)
+import qualified Data.HashMap.Strict                    as HashMap
+
 import           Data.Proxy                             (Proxy (Proxy))
 
 import           Flow                                   ((.>), (|>))
+
+import           Control.Exception                      (assert)
+import           System.IO                              (hPutStrLn, stderr)
 
 --------------------------------------------------------------------------------
 
@@ -104,6 +123,33 @@ propMBitmapSetWorks = do
       new <- MBitmap.get bitmap i
       pure (old, new)
     not before === after
+
+propMGraphTarjanWorks :: HH.Property
+propMGraphTarjanWorks = do
+  HH.property $ do
+    createGraph <- HH.forAll $ do
+      let labelGen  = Gen.int64 (Range.constant 0 maxBound)
+      let weightGen = Gen.int64 (Range.constant 0 maxBound)
+      Gen.genMGraph labelGen weightGen
+    (actual, truth) <- pure $ runST $ do
+      g <- MGraph.newMGraph
+      Gen.applyMGraphAction createGraph g
+      (cg, nm, _) <- MGraph.freezeToContainersGraph (MGraph.MkSomeMGraph g)
+      let nmT = HashMap.fromList (map (\(x, y) -> (y, x)) (IntMap.toList nm))
+      actual <- MGraph.tarjanSCC @Vector g
+                >>= (Vector.mapM
+                     (\(MGraph.MkSomeMGraph gr) -> MGraph.getNodes gr))
+                >>= (Vector.map (HashSet.map (nmT HashMap.!)
+                                 .> HashSet.toList
+                                 .> Vector.fromList)
+                     .> Vector.toList .> pure)
+      let truth = Graph.scc cg
+                  |> map (Tree.flatten
+                          .> HashSet.fromList
+                          .> HashSet.toList
+                          .> Vector.fromList)
+      pure (sort actual, sort truth)
+    actual === truth
 
 --------------------------------------------------------------------------------
 
@@ -171,7 +217,8 @@ test_EqSat_Internal_MBitmap
 -- | Property tests for "EqSat.Internal.MGraph".
 test_EqSat_Internal_MGraph :: IO TestTree
 test_EqSat_Internal_MGraph
-  = [ -- FIXME: write property tests
+  = [ prop "propMGraphTarjanWorks" propMGraphTarjanWorks
+      -- FIXME: write property tests
     ] |> Tasty.testGroup "EqSat.Internal.MGraph" |> pure
 
 -- | Property tests for "EqSat.Internal.GraphMatching".

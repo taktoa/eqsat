@@ -114,6 +114,7 @@ test-suite tests
                         , EqSat.Tests.Integration
                         , EqSat.Tests.Gen.Misc
                         , EqSat.Internal.MBitmap.Gen
+                        , EqSat.Internal.MGraph.Gen
     build-depends:        eqsat
                         , base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3

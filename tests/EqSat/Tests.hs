@@ -30,7 +30,7 @@ runTests = tests >>= Tasty.defaultMain
 tests :: IO Tasty.TestTree
 tests = do
   us <- unitTests
-  ps <- integrationTests
+  ps <- propertyTests
   is <- integrationTests
   let ts = [ Tasty.testGroup "Unit tests"        us
            , Tasty.testGroup "Property tests"    ps

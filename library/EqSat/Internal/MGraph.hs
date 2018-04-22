@@ -38,6 +38,15 @@ import qualified Data.Judy                 as Judy
 
 import           GHC.Generics              (Generic)
 
+import           Data.Set                  (Set)
+import qualified Data.Set                  as Set
+
+import           Data.Map.Strict           (Map)
+import qualified Data.Map.Strict           as Map
+
+import           Data.IntMap               (IntMap)
+import qualified Data.IntMap               as IntMap
+
 import           Data.HashSet              (HashSet)
 import qualified Data.HashSet              as HashSet
 
@@ -52,6 +61,8 @@ import qualified EqSat.Internal.MHashMap   as MHashMap
 
 import           Data.Vector.Generic       (Mutable, Vector)
 import qualified Data.Vector.Generic       as Vector
+
+import qualified Data.Graph
 
 import           Flow                      ((.>), (|>))
 
@@ -383,11 +394,6 @@ getEdgesWithWeight graph weight = do
             >>= MHashSet.freeze
   pure (HashSet.map (uncurry (UnsafeMkMEdge graph)) frozen)
 
---     { _mgraphEdgeMap       :: !(MHashMap s v (MHashMap s v e))
---     , _mgraphNodeSet       :: !(MHashSet s v)
---     , _mgraphWeightToPairs :: !(MHashMap s e (MHashSet s (v, v)))
---     }
-
 -- | FIXME: doc
 getOutgoingEdges
   :: (Eq v, Eq e, Hashable v, Hashable e, PrimMonad m)
@@ -440,16 +446,13 @@ tarjanSCC
      ( PrimMonad m, Vector vec (SCC (PrimState m) v e)
      , Eq v, Eq e, Hashable v, Hashable e
      )
-  => MNode (PrimState m) g v e
-  -- ^ The root node of the 'MGraph' on which Tarjan's strongly-connected
-  --   components algorithm will be run. This function does not mutate
-  --   the 'MGraph'.
+  => MGraph (PrimState m) g v e
+  -- ^ The 'MGraph' on which Tarjan's strongly-connected components algorithm
+  --   will be run. This function does not mutate the 'MGraph'.
   -> m (vec (SCC (PrimState m) v e))
   -- ^ A 'PrimMonad' action returning a vector containing the strongly-connected
   --   components of the given 'MGraph' in reverse topological order.
-tarjanSCC root = do
-  let graph = graphMNode root
-
+tarjanSCC graph = do
   numNodes <- numNodesMGraph graph
 
   indexRef   <- stToPrim $ STRef.newSTRef (0 :: Int)
@@ -525,6 +528,27 @@ tarjanSCC root = do
 
   -- FIXME: use an MVector instead of a list for efficiency
   Vector.fromList <$> stToPrim (STRef.readSTRef resultRef)
+
+--------------------------------------------------------------------------------
+
+freezeToContainersGraph
+  :: (Eq v, Hashable v, PrimMonad m)
+  => SomeMGraph (PrimState m) v e
+  -> m (Data.Graph.Graph, IntMap v, Map (Int, Int) e)
+freezeToContainersGraph (MkSomeMGraph graph) = do
+  numNodes <- numNodesMGraph graph
+  (vm, vmT) <- stToPrim $ do
+    labels <- MHashMap.new
+    nodes  <- getNodes graph |> fmap (HashSet.toList .> zip [0 .. numNodes - 1])
+    forM_ nodes (uncurry (MHashMap.insert labels))
+    xs <- HashMap.toList <$> MHashMap.freeze labels
+    pure (IntMap.fromList xs, HashMap.fromList (map (\(a, b) -> (b, a)) xs))
+  em <- (MHashMap.foldM (_mgraphEdgeMap graph) Map.empty $ \sourceL m r -> do
+            MHashMap.foldM m r $ \targetL weight -> do
+              let (s, t) = ( vmT HashMap.! sourceL, vmT HashMap.! targetL )
+              Map.insert (s, t) weight .> pure)
+  let g = Data.Graph.buildG (0, numNodes - 1) (Map.keys em)
+  pure (g, vm, em)
 
 --------------------------------------------------------------------------------
 
