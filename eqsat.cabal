@@ -80,6 +80,7 @@ library
                         , EqSat.Equation
                         , EqSat.Variable
                         , EqSat.Domain
+                        , EqSat.TypeSystem
                         , EqSat.IsExpression
                         , EqSat.Internal.MHashSet
                         , EqSat.Internal.MHashMap
