@@ -456,6 +456,16 @@ data EPEG g node
     }
   deriving ()
 
+mapEPEG
+  :: (Eq nodeA, Eq nodeB, Hashable nodeA, Hashable nodeB)
+  => (nodeA -> nodeB)
+  -> EPEG g nodeA
+  -> EPEG g nodeB
+mapEPEG = undefined
+
+epegNodes :: EPEG g node -> Vector node
+epegNodes = undefined
+
 -- | Return a 'Bool' representing whether the two given vertices are in the same
 --   class of the equivalence relation contained in the given 'EPEG'.
 epegEquivalent
@@ -723,22 +733,38 @@ applyLinearHeuristic (MkLinearHeuristic f) = f
 runLinearHeuristic
   :: forall node domain m g.
      (MonadIO m, Domain domain)
-  => EPEG g node
+  => SBV.SMTConfig
+  -- ^ FIXME: doc
+  -> EPEG g node
   -- ^ FIXME: doc
   -> LinearHeuristic domain node
   -- ^ FIXME: doc
   -> m (Maybe (SomePEG node))
   -- ^ FIXME: doc
-runLinearHeuristic = undefined
+runLinearHeuristic smtConfig initialEPEG heuristic = do
+  -- FIXME: it's probably bad to use an SMT solver to solve linear systems
+  let h :: SymbolicHeuristic domain node
+      h = MkSymbolicHeuristic
+          { _SymbolicHeuristic_valuation = \epeg -> do
+              xs <- forM (epegNodes epeg) $ \(node, sbool) -> do
+                let coeff = applyLinearHeuristic heuristic node
+                pure (SBV.literal coeff * SBV.oneIf sbool)
+              pure (sum xs)
+          }
+  runSymbolicHeuristic smtConfig initialEPEG h
 
 -- | FIXME: doc
 instance (Domain domain) => Heuristic (LinearHeuristic domain) where
   data HeuristicConfig (LinearHeuristic domain)
     = MkLinearHeuristicConfig
+      { _LinearHeuristicConfig_smtConfig :: SBV.SMTConfig
+      }
   defaultHeuristicConfig _ = do
-    pure MkLinearHeuristicConfig
+    smtConfig <- EqSat.Internal.SBV.smtConfig
+    pure (MkLinearHeuristicConfig smtConfig)
   runHeuristic cfg epeg h = do
-    runLinearHeuristic epeg h
+    let smtConfig = _LinearHeuristicConfig_smtConfig cfg
+    runLinearHeuristic smtConfig epeg h
 
 --------------------------------------------------------------------------------
 
