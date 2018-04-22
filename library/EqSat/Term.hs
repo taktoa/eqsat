@@ -1,96 +1,156 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE KindSignatures     #-}
-{-# LANGUAGE RoleAnnotations    #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE ExplicitNamespaces  #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE RoleAnnotations     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeOperators       #-}
 
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module EqSat.Term
-  ( Term (MkRefTerm, MkVarTerm, MkNodeTerm)
-    -- FIXME: ↑ don't export these constructors
-  , TermRepr (TermReprG, TermReprT)
-  , ReprG
-  , ReprT
-  , GTerm
-  , TTerm
-  , OpenTerm
-  , ClosedTerm
-  , fixTerm
-  , varTerm
-  , nodeTerm
-  , caseTerm
-  , mapNode
-  , freeVars
-  , coerceTTermToGTerm
-  ) where
+module EqSat.Term where
+--   ( Term (MkRefTerm, MkVarTerm, MkNodeTerm)
+--     -- FIXME: ↑ don't export these constructors
+--   , TermRepr (TermReprG, TermReprT)
+--   , ReprG
+--   , ReprT
+--   , GTerm
+--   , TTerm
+--   , OpenTerm
+--   , ClosedTerm
+--   , fixTerm
+--   , varTerm
+--   , nodeTerm
+--   , caseTerm
+--   , mapNode
+--   , freeVars
+--   , coerceTTermToGTerm
+--   ) where
 
 --------------------------------------------------------------------------------
 
-import           Data.Set       (Set)
-import qualified Data.Set       as Set
+import           Data.Set           (Set)
+import qualified Data.Set           as Set
 
-import           Data.Vector    (Vector)
-import qualified Data.Vector    as Vector
+import           Data.Vector        (Vector)
+import qualified Data.Vector        as Vector
 
-import           Data.Void      (Void)
+import           Data.Proxy         (Proxy (Proxy))
+import           Data.Type.Equality ((:~:) (Refl))
+import           Data.Void          (Void)
+import           GHC.Generics       (Generic)
+import           GHC.TypeLits       (type (+), KnownNat, Nat, natVal, sameNat)
 
-import           GHC.Generics   (Generic)
 
-import           Flow           ((|>))
+import           Flow               ((|>))
 
-import           EqSat.Variable (Variable)
+import           EqSat.Variable     (Variable)
 
-import           Refined        (NonNegative, Refined)
+import           Refined            (FromTo, NonNegative, Refined)
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 data TermRepr
-  = TermReprG
-  | TermReprT
+  = -- | FIXME: doc
+    TermReprG
+  | -- | FIXME: doc
+    TermReprT
   deriving (Generic)
 
+-- | FIXME: doc
 type ReprG = 'TermReprG
+
+-- | FIXME: doc
 type ReprT = 'TermReprT
+
+--------------------------------------------------------------------------------
 
 -- | A type of term trees. Each node in the tree contains a value and has an
 --   arbitrary number of children. This type is polymorphic over the type of
 --   variables to exploit a trick that allows us to use the same type for terms
 --   with and without metasyntactic variables.
-data Term (repr :: TermRepr) node var where
+data TermWithDepth (repr :: TermRepr) (depth :: Nat) node var where
   -- | A @ref@ node allows for observable sharing.
-  MkRefTerm  :: !(Refined NonNegative Int)
-             -> Term 'TermReprG node var
+  MkRef  :: !(Refined (FromTo 0 depth) Int)
+         -> TermWithDepth 'TermReprG depth node var
   -- | A @var@ node allows for metasyntactic variables.
-  MkVarTerm  :: !var
-             -> Term repr node var
+  MkVar  :: !var
+         -> TermWithDepth repr depth node var
   -- | A @node@ node allows for the syntax of your language.
-  MkNodeTerm :: !node
-             -> !(Vector (Term repr node var))
-             -> Term repr node var
+  MkNode :: !node
+         -> !(Vector (TermWithDepth repr (depth + 1) node var))
+         -> TermWithDepth repr depth node var
 
 -- | FIXME: doc
-deriving instance (Eq node, Eq var) => Eq (Term repr node var)
+deriving instance ( Eq node, Eq var
+                  ) => Eq (TermWithDepth repr depth node var)
 
 -- | FIXME: doc
-deriving instance (Ord node, Ord var) => Ord (Term repr node var)
+deriving instance ( Ord node, Ord var
+                  ) => Ord (TermWithDepth repr depth node var)
+
+-- | FIXME: doc
+instance Functor (TermWithDepth repr depth node) where
+  fmap _ (MkRef  ref)     = MkRef ref
+  fmap f (MkVar  var)     = MkVar (f var)
+  fmap f (MkNode node cs) = Vector.map (fmap f) cs
+                            |> MkNode node
+
+-- | FIXME: doc
+type TTermWithDepth depth node var = TermWithDepth 'TermReprT depth node var
+
+-- | FIXME: doc
+type GTermWithDepth depth node var = TermWithDepth 'TermReprG depth node var
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+data Term (repr :: TermRepr) node var where
+  -- | FIXME: doc
+  MkTerm :: (KnownNat depth)
+         => TermWithDepth repr depth node var
+         -> Term repr node var
+
+instance (Eq node, Eq var) => Eq (Term repr node var) where
+  (==) = (\(MkTerm a) (MkTerm b) -> go a b)
+    where
+      go :: forall d1 d2.
+            (KnownNat d1, KnownNat d2)
+         => TermWithDepth repr d1 node var
+         -> TermWithDepth repr d2 node var
+         -> Bool
+      go a b = case sameNat (Proxy @d1) (Proxy @d2) of
+                 Just Refl -> (a == b)
+                 Nothing   -> False
+
+instance (Ord node, Ord var) => Ord (Term repr node var) where
+  compare = (\(MkTerm a) (MkTerm b) -> go a b)
+    where
+      go :: forall d1 d2.
+            (KnownNat d1, KnownNat d2)
+         => TermWithDepth repr d1 node var
+         -> TermWithDepth repr d2 node var
+         -> Ordering
+      go a b = case sameNat (Proxy @d1) (Proxy @d2) of
+                 Just Refl -> compare a b
+                 Nothing   -> compare (natVal (Proxy @d1)) (natVal (Proxy @d2))
+
+-- | FIXME: doc
+instance Functor (Term repr node) where
+  fmap f (MkTerm twd) = MkTerm (fmap f twd)
 
 -- | FIXME: doc
 type TTerm node var = Term 'TermReprT node var
 
 -- | FIXME: doc
 type GTerm node var = Term 'TermReprG node var
-
--- | FIXME: doc
-instance Functor (Term repr node) where
-  fmap _ (MkRefTerm  ref)     = MkRefTerm ref
-  fmap f (MkVarTerm  var)     = MkVarTerm (f var)
-  fmap f (MkNodeTerm node cs) = Vector.map (fmap f) cs
-                                |> MkNodeTerm node
 
 --------------------------------------------------------------------------------
 
@@ -103,34 +163,34 @@ type ClosedTerm repr node = Term repr node Void
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-fixTerm
+fixTWD
   :: (Eq var)
   => var
   -- ^ FIXME: doc
-  -> Term repr node var
+  -> TermWithDepth repr depth node var
   -- ^ FIXME: doc
-  -> GTerm node var
+  -> GTermWithDepth depth node var
   -- ^ FIXME: doc
-fixTerm
+fixTWD
   = undefined -- FIXME: replace all matching var nodes with refs at their depth
 
 -- | FIXME: doc
-varTerm
+varTWD
   :: var
   -- ^ FIXME: doc
-  -> Term repr node var
+  -> TermWithDepth repr depth node var
   -- ^ FIXME: doc
-varTerm = MkVarTerm
+varTWD = MkVar
 
 -- | FIXME: doc
-nodeTerm
+nodeTWD
   :: node
   -- ^ FIXME: doc
-  -> Vector (Term repr node var)
+  -> Vector (TermWithDepth repr (depth + 1) node var)
   -- ^ FIXME: doc
-  -> Term repr node var
+  -> TermWithDepth repr depth node var
   -- ^ FIXME: doc
-nodeTerm = MkNodeTerm
+nodeTWD = MkNode
 
 --------------------------------------------------------------------------------
 
@@ -144,8 +204,9 @@ caseTerm
   -- ^ FIXME: doc
   -> result
   -- ^ FIXME: doc
-caseTerm f _ (MkVarTerm  var)           = f var
-caseTerm _ f (MkNodeTerm node children) = f node children
+caseTerm = undefined
+-- caseTerm f _ (MkVar  var)           = f var
+-- caseTerm _ f (MkNode node children) = f node children
 
 --------------------------------------------------------------------------------
 
@@ -157,10 +218,7 @@ mapNode
   -- ^ FIXME: doc
   -> Term repr nodeB var
   -- ^ FIXME: doc
-mapNode _ (MkRefTerm  ref)           = MkRefTerm ref
-mapNode _ (MkVarTerm  var)           = MkVarTerm var
-mapNode f (MkNodeTerm node children) = Vector.map (mapNode f) children
-                                       |> MkNodeTerm (f node)
+mapNode f (MkTerm twd) = MkTerm (mapNodeTWD f twd)
 
 -- | Get the 'Set' of free variables in the given 'Term'.
 freeVars
@@ -169,15 +227,51 @@ freeVars
   -- ^ A term.
   -> Set var
   -- ^ The set of free variables in the given term.
-freeVars (MkRefTerm  _)          = Set.empty
-freeVars (MkVarTerm  var)        = Set.singleton var
-freeVars (MkNodeTerm _ children) = Vector.map freeVars children
-                                   |> Vector.toList |> Set.unions
+freeVars (MkTerm twd) = freeVarsTWD twd
 
 -- | FIXME: doc
-coerceTTermToGTerm :: TTerm node var -> GTerm node var
-coerceTTermToGTerm (MkVarTerm  var)     = MkVarTerm var
-coerceTTermToGTerm (MkNodeTerm node cs) = Vector.map coerceTTermToGTerm cs
-                                          |> MkNodeTerm node
+coerceTTermToGTerm
+  :: TTerm node var
+  -- ^ FIXME: doc
+  -> GTerm node var
+  -- ^ FIXME: doc
+coerceTTermToGTerm (MkTerm twd) = MkTerm (coerceTTWDToGTWD twd)
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+mapNodeTWD
+  :: (nodeA -> nodeB)
+  -- ^ FIXME: doc
+  -> TermWithDepth repr depth nodeA var
+  -- ^ FIXME: doc
+  -> TermWithDepth repr depth nodeB var
+  -- ^ FIXME: doc
+mapNodeTWD _ (MkRef  ref)     = MkRef ref
+mapNodeTWD _ (MkVar  var)     = MkVar var
+mapNodeTWD f (MkNode node cs) = Vector.map (mapNodeTWD f) cs
+                                |> MkNode (f node)
+
+-- | Get the 'Set' of free variables in the given 'TermWithDepth'.
+freeVarsTWD
+  :: (Ord var)
+  => TermWithDepth repr depth node var
+  -- ^ A term.
+  -> Set var
+  -- ^ The set of free variables in the given 'TermWithDepth'.
+freeVarsTWD (MkRef  _)          = Set.empty
+freeVarsTWD (MkVar  var)        = Set.singleton var
+freeVarsTWD (MkNode _ children) = Vector.map freeVarsTWD children
+                                  |> Vector.toList |> Set.unions
+
+-- | FIXME: doc
+coerceTTWDToGTWD
+  :: TTermWithDepth depth node var
+  -- ^ FIXME: doc
+  -> GTermWithDepth depth node var
+  -- ^ FIXME: doc
+coerceTTWDToGTWD (MkVar  var)     = MkVar var
+coerceTTWDToGTWD (MkNode node cs) = Vector.map coerceTTWDToGTWD cs
+                                    |> MkNode node
 
 --------------------------------------------------------------------------------
