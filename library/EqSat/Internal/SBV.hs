@@ -4,6 +4,7 @@
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 module EqSat.Internal.SBV
   ( smtConfig
   ) where
@@ -24,6 +25,7 @@ import           Control.Monad.IO.Class (MonadIO (liftIO))
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 smtConfig :: (MonadIO m) => m SBV.SMTConfig
 smtConfig = do
   let solver = (SBV.solver SBV.z3)

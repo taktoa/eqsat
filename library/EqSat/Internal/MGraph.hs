@@ -114,6 +114,7 @@ numEdgesMGraph = _mgraphWeightToPairs .> MHashMap.length
 
 -- | FIXME: doc
 data SomeMGraph s v e where
+  -- | FIXME: doc
   MkSomeMGraph :: MGraph s g v e
                -> SomeMGraph s v e
 
@@ -123,11 +124,13 @@ data SomeMGraph s v e where
 
 -- | FIXME: doc
 data MNode s g v e
-  = UnsafeMkMNode
+  = -- | FIXME: doc
+    UnsafeMkMNode
     { _mnodeGraph :: !(MGraph s g v e)
+      -- ^ FIXME: doc
     , _mnodeLabel :: !v
+      -- ^ FIXME: doc
     }
-  deriving ()
 
 -- | Compares just the labels for equality, not the whole graph.
 --   This is okay because the phantom type variable @g@ ensures that the
