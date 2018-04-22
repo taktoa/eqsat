@@ -1,13 +1,8 @@
 --------------------------------------------------------------------------------
 
-{-# OPTIONS_GHC -fplugin GHC.TypeLits.Normalise #-}
-
---------------------------------------------------------------------------------
-
 {-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ExplicitNamespaces        #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE GADTSyntax                #-}
 {-# LANGUAGE KindSignatures            #-}
@@ -18,7 +13,6 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeFamilies              #-}
-{-# LANGUAGE TypeOperators             #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
 
 --------------------------------------------------------------------------------
@@ -105,11 +99,7 @@ import qualified EqSat.Internal.SBV
 
 import           Flow                            ((.>), (|>))
 
-import           Data.Type.Equality              ((:~:) (Refl))
 import           GHC.Generics                    (Generic)
-import           GHC.TypeLits
-                 (type (+), KnownNat, Nat, natVal, sameNat)
-import qualified GHC.TypeLits                    as TL
 
 import           EqSat.Internal.MHashMap         (MHashMap)
 import qualified EqSat.Internal.MHashMap         as MHashMap
@@ -121,8 +111,8 @@ import           EqSat.Variable                  (Variable)
 import qualified EqSat.Variable                  as Variable
 
 import           EqSat.Term
-                 (ClosedTerm, GTerm, OpenTerm, TTerm, Term (MkTerm),
-                 TermWithDepth (MkNode, MkRef, MkVar))
+                 (ClosedTerm, GTerm, OpenTerm, TTerm,
+                 Term (MkNodeTerm, MkRefTerm, MkVarTerm))
 import qualified EqSat.Term                      as Term
 
 import           EqSat.TypedTerm
@@ -389,12 +379,13 @@ pegChildren = undefined -- FIXME
 -- | Convert a 'PEG' into a term by starting at the root node and recursively
 --   expanding nodes. If there is a cycle in the 'PEG', this will not terminate.
 pegToTerm
-  :: forall node g.
-     PEG g node
+  :: PEG g node
   -- ^ FIXME: doc
   -> ClosedTerm Term.ReprG node
   -- ^ FIXME: doc
-pegToTerm = undefined
+pegToTerm peg = MkNodeTerm
+                (pegRootNode peg)
+                (Vector.map pegToTerm (pegChildren peg))
 
 -- | Modify a 'PEG', returning 'Nothing' if the modification you made to the
 --   underlying 'Graph' made the 'PEG' no longer valid (e.g.: you added two
@@ -767,9 +758,9 @@ matchPattern = do
          -> TTerm node var
          -> EPEG g node
          -> MaybeT (ST s) ()
-      go hm (MkTerm term) epeg
+      go hm term epeg
         = case term of
-            (MkVar var) -> do
+            (MkVarTerm var) -> do
               -- This is the equivalence relation under which non-linear pattern
               -- matches are checked. Currently it checks that the two nodes are
               -- exactly equal, so this means that matching will sometimes fail
@@ -778,11 +769,11 @@ matchPattern = do
                   equiv a b = pegRoot (epegPEG a) == pegRoot (epegPEG b)
               MHashMap.insertWith hm var epeg
                 $ \a b -> guard (a `equiv` b) >> pure a
-            (MkNode node children) -> do
+            (MkNodeTerm node children) -> do
               let pairs = Vector.zip children (epegChildren epeg)
               guard (node == epegRootNode epeg)
               Vector.forM_ pairs $ \(subpat, subgraph) -> do
-                go hm (MkTerm subpat) subgraph
+                go hm subpat subgraph
   \term epeg -> runST $ MaybeT.runMaybeT $ do
     hm <- MHashMap.new
     go hm term epeg
