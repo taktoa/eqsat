@@ -1,8 +1,10 @@
 --------------------------------------------------------------------------------
 
 {-# LANGUAGE DataKinds          #-}
+{-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE KindSignatures     #-}
+{-# LANGUAGE RoleAnnotations    #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
 --------------------------------------------------------------------------------
@@ -24,6 +26,7 @@ module EqSat.Term
   , caseTerm
   , mapNode
   , freeVars
+  , coerceTTermToGTerm
   ) where
 
 --------------------------------------------------------------------------------
@@ -36,6 +39,8 @@ import qualified Data.Vector    as Vector
 
 import           Data.Void      (Void)
 
+import           GHC.Generics   (Generic)
+
 import           Flow           ((|>))
 
 import           EqSat.Variable (Variable)
@@ -45,7 +50,7 @@ import           EqSat.Variable (Variable)
 data TermRepr
   = TermReprG
   | TermReprT
-  deriving ()
+  deriving (Generic)
 
 type ReprG = 'TermReprG
 type ReprT = 'TermReprT
@@ -67,7 +72,7 @@ data Term (repr :: TermRepr) node var where
              -> Term repr node var
 
 -- | FIXME: doc
-deriving instance (Eq  node, Eq  var) => Eq  (Term repr node var)
+deriving instance (Eq node, Eq var) => Eq (Term repr node var)
 
 -- | FIXME: doc
 deriving instance (Ord node, Ord var) => Ord (Term repr node var)
@@ -78,10 +83,12 @@ type TTerm node var = Term 'TermReprT node var
 -- | FIXME: doc
 type GTerm node var = Term 'TermReprG node var
 
+-- | FIXME: doc
 instance Functor (Term repr node) where
-  fmap f (MkVarTerm  var)           = MkVarTerm (f var)
-  fmap f (MkNodeTerm node children) = Vector.map (fmap f) children
-                                      |> MkNodeTerm node
+  fmap _ (MkRefTerm  ref)     = MkRefTerm ref
+  fmap f (MkVarTerm  var)     = MkVarTerm (f var)
+  fmap f (MkNodeTerm node cs) = Vector.map (fmap f) cs
+                                |> MkNodeTerm node
 
 --------------------------------------------------------------------------------
 
@@ -160,9 +167,15 @@ freeVars
   -- ^ A term.
   -> Set var
   -- ^ The set of free variables in the given term.
-freeVars (MkRefTerm  ref)        = Set.empty
+freeVars (MkRefTerm  _)          = Set.empty
 freeVars (MkVarTerm  var)        = Set.singleton var
 freeVars (MkNodeTerm _ children) = Vector.map freeVars children
                                    |> Vector.toList |> Set.unions
+
+-- | FIXME: doc
+coerceTTermToGTerm :: TTerm node var -> GTerm node var
+coerceTTermToGTerm (MkVarTerm  var)     = MkVarTerm var
+coerceTTermToGTerm (MkNodeTerm node cs) = Vector.map coerceTTermToGTerm cs
+                                          |> MkNodeTerm node
 
 --------------------------------------------------------------------------------
