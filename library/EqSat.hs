@@ -105,10 +105,12 @@ import           EqSat.Variable               (Variable)
 import qualified EqSat.Variable               as Variable
 
 import           EqSat.Term
-                 (ClosedTerm, OpenTerm, Term (MkNodeTerm, MkVarTerm))
+                 (ClosedTerm, GTerm, OpenTerm, TTerm,
+                 Term (MkNodeTerm, MkRefTerm, MkVarTerm))
 import qualified EqSat.Term                   as Term
 
-import           EqSat.TypedTerm              (Substitution, TypedTerm)
+import           EqSat.TypedTerm
+                 (Substitution, TypedGTerm, TypedTTerm, TypedTerm)
 import qualified EqSat.TypedTerm              as TypedTerm
 
 import           EqSat.Equation               (Equation)
@@ -117,7 +119,7 @@ import qualified EqSat.Equation               as Equation
 import           EqSat.Domain                 (Domain)
 
 import           EqSat.IsExpression
-                 (IsExpression (exprToTerm, termToExpr))
+                 (IsExpression (exprToGTerm, gtermToExpr))
 
 import qualified EqSat.Internal.PrettyPrinter as PP
 
@@ -137,7 +139,7 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   @-XAllowAmbiguousTypes@ as well as an open 'Term' with variables
   --   in an arbitrary @var@ type.
   --
-  --   Returns a @'Maybe' ('TypedTerm' var node expr)@.
+  --   Returns a @'Maybe' ('TypedTerm' repr var node expr)@.
   --   'Nothing' should only be returned in case of a failure in type inference.
   --
   --   The 'Ord' and 'Hashable' instances are there so that you can efficiently
@@ -145,8 +147,8 @@ class (IsExpression node expr) => TypeSystem node expr where
   --   variables.
   inferType
     :: (Ord var, Hashable var, MonadError (TypeError expr) m)
-    => Term node var
-    -> m (TypedTerm node var (Type expr))
+    => Term repr node var
+    -> m (TypedTerm repr node var (Type expr))
 
   -- | Return 'True' if the first given 'Type' is a subtype of the second
   --   given 'Type' in your type system, and return 'False' otherwise.
@@ -207,21 +209,21 @@ data CheckEquationError node var expr
   | -- | FIXME: doc
     CheckEquationError_OutOfScope
     { _CheckEquationError_var :: !var
-    , _CheckEquationError_lhs :: !(TypedTerm node var (Type expr))
-    , _CheckEquationError_rhs :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_lhs :: !(TypedTTerm node var (Type expr))
+    , _CheckEquationError_rhs :: !(TypedGTerm node var (Type expr))
     }
   | -- | FIXME: doc
     CheckEquationError_MetaVarNotSubtype
     { _CheckEquationError_var        :: !var
-    , _CheckEquationError_lhs        :: !(TypedTerm node var (Type expr))
-    , _CheckEquationError_rhs        :: !(TypedTerm node var (Type expr))
+    , _CheckEquationError_lhs        :: !(TypedTTerm node var (Type expr))
+    , _CheckEquationError_rhs        :: !(TypedGTerm node var (Type expr))
     , _CheckEquationError_lhsVarType :: !(Type expr)
     , _CheckEquationError_rhsVarType :: !(Type expr)
     }
   | -- | FIXME: doc
     CheckEquationError_OverallNotEqual
-    { _CheckEquationError_lhs     :: !(TypedTerm node var (Type expr))
-    , _CheckEquationError_rhs     :: !(TypedTerm node var (Type expr))
+    { _CheckEquationError_lhs     :: !(TypedTTerm node var (Type expr))
+    , _CheckEquationError_rhs     :: !(TypedGTerm node var (Type expr))
     , _CheckEquationError_lhsType :: !(Type expr)
     , _CheckEquationError_rhsType :: !(Type expr)
     }
@@ -261,7 +263,7 @@ checkEquation
      , TypeSystem node expr
      , MonadError (CheckEquationError node var expr) m
      )
-  => (Term node var, Term node var)
+  => (TTerm node var, GTerm node var)
   -- ^ FIXME: doc
   -> m (TypedEquation node var (Type expr))
   -- ^ FIXME: doc
@@ -389,7 +391,7 @@ data PEG g node
 --       order, then you will recover the order of the children of that node in
 --       the original subterm.
 makePEG
-  :: Term node (SomePEG node)
+  :: Term repr node (SomePEG node)
   -- ^ FIXME: doc
   -> PEG g node
   -- ^ FIXME: doc
@@ -397,7 +399,7 @@ makePEG = undefined
 
 -- | FIXME: doc
 makePEG'
-  :: ClosedTerm node
+  :: ClosedTerm repr node
   -- ^ FIXME: doc
   -> PEG g node
   -- ^ FIXME: doc
@@ -468,7 +470,7 @@ pegChildren = undefined -- FIXME
 pegToTerm
   :: PEG g node
   -- ^ FIXME: doc
-  -> ClosedTerm node
+  -> ClosedTerm Term.ReprG node
   -- ^ FIXME: doc
 pegToTerm peg = MkNodeTerm
                 (pegRootNode peg)
@@ -759,7 +761,7 @@ instance (Domain d) => Heuristic (GlobalSymbolicPerformanceHeuristic d) where
 matchPattern
   :: forall node var g.
      (Eq node, Ord var, Hashable var)
-  => Term node var
+  => TTerm node var
   -- ^ FIXME: doc
   -> EPEG g node
   -- ^ FIXME: doc
@@ -768,7 +770,7 @@ matchPattern
 matchPattern = do
   let go :: forall s.
             MHashMap s var (EPEG g node)
-         -> Term node var
+         -> TTerm node var
          -> EPEG g node
          -> MaybeT (ST s) ()
       go hm term epeg
@@ -796,7 +798,7 @@ matchPattern = do
 applyRule
   :: forall node var g.
      (Eq node, Ord var, Hashable var)
-  => (Term node var, Term node var)
+  => (TTerm node var, GTerm node var)
   -- ^ FIXME: doc
   -> EPEG g node
   -- ^ FIXME: doc
@@ -898,8 +900,8 @@ equalitySaturation
   -- ^ The list of results produced by the second callback, in _reverse_
   --   chronological order (e.g.: starting with newest and ending with oldest).
 equalitySaturation eqs heuristic initial timer cb
-  = let exprToEPEG = exprToTerm .> makePEG' .> pegToEPEG
-        pegToExpr (MkSomePEG peg) = case termToExpr (pegToTerm peg) of
+  = let exprToEPEG = exprToGTerm .> makePEG' .> pegToEPEG
+        pegToExpr (MkSomePEG peg) = case gtermToExpr (pegToTerm peg) of
                                       Left  exception -> throwError exception
                                       Right result    -> pure result
     in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)

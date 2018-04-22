@@ -17,7 +17,7 @@ import           Control.Monad (guard)
 import           Data.Set      (Set)
 import qualified Data.Set      as Set
 
-import           EqSat.Term    (Term, freeVars)
+import           EqSat.Term    (GTerm, TTerm, Term, freeVars)
 import qualified EqSat.Term    as Term
 
 --------------------------------------------------------------------------------
@@ -25,8 +25,8 @@ import qualified EqSat.Term    as Term
 -- | FIXME: doc
 data Equation node var
   = UnsafeMkEquation
-    !(Term node var)
-    !(Term node var)
+    !(TTerm node var)
+    !(GTerm node var)
     !(Set var)
   deriving (Eq, Ord)
 
@@ -48,12 +48,12 @@ data Equation node var
 --     implies that @'makeEquation' (lhs, rhs) ≡ 'Nothing'@.
 make
   :: (Ord var)
-  => (Term node var, Term node var)
+  => (TTerm node var, GTerm node var)
   -- ^ A pair @(lhs, rhs)@ containing the left- and right-hand sides
   --   respectively of the would-be equation.
   -> Maybe (Equation node var)
   -- ^ The equation, if the given @(lhs, rhs)@ pair was valid.
-make (rhs, lhs) = do
+make (lhs, rhs) = do
   let (freeLHS, freeRHS) = (freeVars lhs, freeVars rhs)
   guard (freeRHS `Set.isSubsetOf` freeLHS)
   pure (UnsafeMkEquation lhs rhs freeLHS)
@@ -62,7 +62,7 @@ make (rhs, lhs) = do
 from
   :: Equation node var
   -- ^ An equation.
-  -> (Term node var, Term node var)
+  -> (TTerm node var, GTerm node var)
   -- ^ A pair @(lhs, rhs)@ containing the left- and right-hand sides
   --   respectively of the given equation.
 from (UnsafeMkEquation lhs rhs _) = (lhs, rhs)
@@ -79,7 +79,7 @@ boundVariables (UnsafeMkEquation _ _ bounds) = bounds
 getLHS
   :: Equation node var
   -- ^ An equation.
-  -> Term node var
+  -> TTerm node var
   -- ^ The left-hand side of the given equation.
 getLHS = fst . from
 
@@ -87,7 +87,7 @@ getLHS = fst . from
 getRHS
   :: Equation node var
   -- ^ An equation.
-  -> Term node var
+  -> GTerm node var
   -- ^ The right-hand side of the given equation.
 getRHS = snd . from
 

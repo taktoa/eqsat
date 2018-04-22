@@ -4,6 +4,8 @@
 module EqSat.TypedTerm
   ( Substitution
   , TypedTerm
+  , TypedGTerm
+  , TypedTTerm
   , makeTypedTerm
   , underlyingTerm
   , wholeTermTypingFunction
@@ -59,13 +61,19 @@ type Substitution a b
 --      if @θ@ is a substitution such that for every free variable @v@ of the
 --      underlying term, @((⊆) '<$>' θ v '<*>' m v) ≡ 'Just' 'True'@, then
 --      there exists a type @t@ such that @w θ ≡ 'Just' t@.
-data TypedTerm node var ty
+data TypedTerm repr node var ty
   = UnsafeMkTypedTerm
-    { _typedTermUnderlyingTerm :: Term node var
+    { _typedTermUnderlyingTerm :: Term repr node var
     , _typedTermOverallType    :: Substitution var ty -> Maybe ty
     , _typedTermVarType        :: Substitution var ty
     }
   deriving ()
+
+-- | FIXME: doc
+type TypedGTerm node var ty = TypedTerm Term.ReprG node var ty
+
+-- | FIXME: doc
+type TypedTTerm node var ty = TypedTerm Term.ReprT node var ty
 
 --------------------------------------------------------------------------------
 
@@ -80,7 +88,7 @@ data TypedTerm node var ty
 --      typing function is @'Just' t@ for some type @t@.
 makeTypedTerm
   :: (Ord var)
-  => Term node var
+  => Term repr node var
   -- ^ The underlying 'Term' of the 'TypedTerm' we are going to make.
   -> (Substitution var ty -> Maybe ty)
   -- ^ The overall 'Type' of the given 'Term'.
@@ -89,7 +97,7 @@ makeTypedTerm
   --   The function must return 'Just' if the given variable was one of the
   --   free variables of the term, or else an 'AssertionFailed' exception
   --   will be thrown before the 'TypedTerm' is returned by this function.
-  -> Maybe (TypedTerm node var ty)
+  -> Maybe (TypedTerm repr node var ty)
   -- ^ A typed term, if all the preconditions are met.
 makeTypedTerm term overallType varType = do
   let free  = Term.freeVars term
@@ -108,15 +116,15 @@ makeTypedTerm term overallType varType = do
 
 -- | Get the underlying term of the given 'TypedTerm'.
 underlyingTerm
-  :: TypedTerm node var ty
+  :: TypedTerm repr node var ty
   -- ^ A 'TypedTerm'.
-  -> Term node var
+  -> Term repr node var
   -- ^ The underlying term of the given 'TypedTerm'.
 underlyingTerm = _typedTermUnderlyingTerm
 
 -- | Get the whole-term typing function of the given 'TypedTerm'.
 wholeTermTypingFunction
-  :: TypedTerm node var ty
+  :: TypedTerm repr node var ty
   -- ^ A 'TypedTerm'.
   -> (Substitution var ty -> Maybe ty)
   -- ^ The whole-term typing function of the given 'TypedTerm'.
@@ -124,7 +132,7 @@ wholeTermTypingFunction = _typedTermOverallType
 
 -- | Get the metavariable typing function of the given 'TypedTerm'.
 metavariableTypingFunction
-  :: TypedTerm node var ty
+  :: TypedTerm repr node var ty
   -- ^ A 'TypedTerm'.
   -> Substitution var ty
   -- ^ The metavariable typing function of the given 'TypedTerm'.
@@ -135,7 +143,7 @@ metavariableTypingFunction = _typedTermVarType
 -- | Get the 'Set' of free variables in the given 'TypedTerm'.
 freeVars
   :: (Ord var)
-  => TypedTerm node var ty
+  => TypedTerm repr node var ty
   -- ^ A typed term.
   -> Set var
   -- ^ The set of free variables in the given typed term.

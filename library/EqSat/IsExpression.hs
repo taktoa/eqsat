@@ -9,30 +9,30 @@
 
 -- | FIXME: doc
 module EqSat.IsExpression
-  ( IsExpression (exprToTerm, termToExpr)
+  ( IsExpression (exprToGTerm, gtermToExpr)
   ) where
 
 --------------------------------------------------------------------------------
 
 import           Control.Exception (SomeException)
 
-import           EqSat.Term        (ClosedTerm)
+import           EqSat.Term        (ClosedTerm, ReprG)
 
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
 class IsExpression node expr | expr -> node where
   -- | FIXME: doc
-  exprToTerm :: expr -> ClosedTerm node
+  exprToGTerm :: expr -> ClosedTerm ReprG node
 
   -- | FIXME: doc
-  termToExpr :: ClosedTerm node -> Either SomeException expr
+  gtermToExpr :: ClosedTerm ReprG node -> Either SomeException expr
 
 --------------------------------------------------------------------------------
 
 -- | Trivial instance.
-instance IsExpression node (ClosedTerm node) where
-  exprToTerm = id
-  termToExpr = pure
+instance IsExpression node (ClosedTerm ReprG node) where
+  exprToGTerm = id
+  gtermToExpr = pure
 
 --------------------------------------------------------------------------------

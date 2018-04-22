@@ -23,7 +23,7 @@ import qualified EqSat.Internal.MHashMap                as MHashMap
 import           EqSat.Internal.MHashSet                (MHashSet)
 import qualified EqSat.Internal.MHashSet                as MHashSet
 import           EqSat.IsExpression
-                 (IsExpression (exprToTerm, termToExpr))
+                 (IsExpression (exprToGTerm, gtermToExpr))
 import           EqSat.Term                             (Term)
 import qualified EqSat.Term                             as Term
 import           EqSat.Variable                         (Variable)
