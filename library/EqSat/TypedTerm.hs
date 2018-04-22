@@ -1,5 +1,9 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE DeriveGeneric #-}
+
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 module EqSat.TypedTerm
   ( Substitution
@@ -17,6 +21,8 @@ module EqSat.TypedTerm
 
 import           Control.Monad (guard)
 import           Data.Maybe    (isJust)
+
+import           GHC.Generics  (Generic)
 
 import           Flow          ((.>))
 
@@ -67,7 +73,7 @@ data TypedTerm repr node var ty
     , _typedTermOverallType    :: Substitution var ty -> Maybe ty
     , _typedTermVarType        :: Substitution var ty
     }
-  deriving ()
+  deriving (Generic)
 
 -- | FIXME: doc
 type TypedGTerm node var ty = TypedTerm Term.ReprG node var ty
