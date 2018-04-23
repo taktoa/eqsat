@@ -83,6 +83,7 @@ library
                         , EqSat.Domain
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
+                        , EqSat.DiscriminationNet
                         , EqSat.Errors.CheckEquationError
                         , EqSat.Internal.MHashSet
                         , EqSat.Internal.MHashMap
