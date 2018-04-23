@@ -111,8 +111,7 @@ import           EqSat.Variable                  (Variable)
 import qualified EqSat.Variable                  as Variable
 
 import           EqSat.Term
-                 (ClosedTerm, GTerm, OpenTerm, TTerm,
-                 Term (MkNodeTerm, MkRefTerm, MkVarTerm))
+                 (GTerm, TTerm, Term (MkNodeTerm, MkRefTerm, MkVarTerm))
 import qualified EqSat.Term                      as Term
 
 import           EqSat.TypedTerm
@@ -310,7 +309,7 @@ makePEG = undefined
 
 -- | FIXME: doc
 makePEG'
-  :: ClosedTerm repr node
+  :: Term.ClosedTerm repr node
   -- ^ FIXME: doc
   -> PEG g node
   -- ^ FIXME: doc
@@ -381,7 +380,7 @@ pegChildren = undefined -- FIXME
 pegToTerm
   :: PEG g node
   -- ^ FIXME: doc
-  -> ClosedTerm Term.ReprG node
+  -> Term.ClosedGTerm node
   -- ^ FIXME: doc
 pegToTerm peg = MkNodeTerm
                 (pegRootNode peg)

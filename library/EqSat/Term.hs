@@ -18,8 +18,8 @@ module EqSat.Term
   , ReprT
   , GTerm
   , TTerm
-  , OpenTerm
-  , ClosedTerm
+  , OpenTerm, OpenTTerm, OpenGTerm
+  , ClosedTerm, ClosedTTerm, ClosedGTerm
   , fixTerm
   , varTerm
   , nodeTerm
@@ -99,6 +99,18 @@ type OpenTerm repr node = Term repr node Variable
 
 -- | A closed term is one without any variables.
 type ClosedTerm repr node = Term repr node Void
+
+-- | An open term may have (metasyntactic) variables of type 'Variable'.
+type OpenTTerm node = OpenTerm ReprT node
+
+-- | A closed term is one without any variables.
+type ClosedTTerm node = ClosedTerm ReprT node
+
+-- | An open term may have (metasyntactic) variables of type 'Variable'.
+type OpenGTerm node = OpenTerm ReprG node
+
+-- | A closed term is one without any variables.
+type ClosedGTerm node = ClosedTerm ReprG node
 
 --------------------------------------------------------------------------------
 
