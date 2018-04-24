@@ -1,7 +1,12 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
 
 --------------------------------------------------------------------------------
 
@@ -11,7 +16,14 @@ module EqSat.DiscriminationNet
 
 --------------------------------------------------------------------------------
 
+import           Control.Monad           (void)
 import           Control.Monad.Primitive
+import           Control.Monad.ST        (ST)
+
+import           Data.Maybe
+
+import qualified Data.Foldable           as Foldable
+import           Data.Functor.Identity   (Identity)
 
 import           Data.Hashable           (Hashable)
 
@@ -30,8 +42,6 @@ import qualified Data.Vector.Mutable     as MVector
 import           Data.STRef              (STRef)
 import qualified Data.STRef              as STRef
 
-import           Data.Maybe
-
 import           Flow
 
 import           EqSat.Term              (TTerm, Term (MkNodeTerm, MkVarTerm))
@@ -43,7 +53,152 @@ import qualified EqSat.Equation          as Equation
 import           EqSat.Internal.MHashSet (MHashSet)
 import qualified EqSat.Internal.MHashSet as MHashSet
 
+import           Refined                 (NonNegative, Refined)
+import qualified Refined
+
 --------------------------------------------------------------------------------
+
+-- | A typeclass abstracting the functions that tree-like types have.
+--
+--   Specifically, I'm talking about rooted directed graphs with labeled edges
+--   such that the type of labels is totally ordered and no two edges out of the
+--   same vertex have the same label.
+--
+--   If the tree is pure (i.e.: an ADT), then @m@ will probably be 'Identity'.
+--
+--   If the tree is impure, then @m@ will probably be @('PrimMonad' m) ⇒ m@
+--   or @'ST' s@ or 'IO'.
+class (Monad m, Eq node) => TreeLike m node | node -> m where
+  {-# MINIMAL childrenOf | forChildren #-}
+
+  -- | Returns a 'Vector' containing all of the children of the given node
+  --   in the order given by sorting the edge labels in increasing order.
+  --
+  --   Laws:
+  --
+  --   1. For any @n ∷ node@, @'childrenOf' n ≡ 'forChildren' n 'pure'@.
+  childrenOf
+    :: node
+    -- ^ A node.
+    -> m [node]
+    -- ^ An @m@ action returning a 'Vector' of its children, in order.
+  childrenOf n = forChildren n pure
+
+  -- | Given a node, return an action that returns an integer ('Refined' so we
+  --   know it is not negative) representing the number of children that that
+  --   node has.
+  --
+  --   Laws:
+  --
+  --   1. For any @n ∷ node@,
+  --      @'unrefine' '<$>' 'numChildren' n ≡ 'length' '<$>' 'childrenOf' n@.
+  numChildren
+    :: node
+    -- ^ A node.
+    -> m (Refined NonNegative Int)
+    -- ^ An action returning the number of children that node has.
+  numChildren n = do
+    len <- Vector.length <$> childrenOf n
+    either fail pure (Refined.refine len)
+
+  -- | Given a node @n ∷ node@ and a function @f ∷ node → m a@, run @f@ on each
+  --   child of @n@ in order, collecting the results into a @[a]@.
+  --
+  --   Laws:
+  --
+  --   1. For any @n ∷ node@ and @f ∷ node → m a@,
+  --      @'forChildren' n f ≡ 'childrenOf' n >>= 'Vector.mapM' f@.
+  forChildren
+    :: node
+    -- ^ A node @n@ whose children will be traversed in order.
+    -> (node -> m a)
+    -- ^ A function @f@ that will be run on each child.
+    -> m [a]
+    -- ^ An action in the @m@ monad that has the effects associated with the
+    --   return values of all of the @f@ executions, sequenced according to
+    --   the order of the children, collecting the results in a list.
+  forChildren n f = do
+    cs <- childrenOf n
+    mapM f cs
+
+  -- | Given a node @n ∷ node@ and a function @f ∷ node → m a@, run @f@ on each
+  --   child of @n@ in order.
+  --
+  --   Laws:
+  --
+  --   1. For any @n ∷ node@ and @f ∷ node → m a@,
+  --      @'forChildren_' n f ≡ 'childrenOf' n >>= 'Vector.mapM_' f@.
+  --   2. For any @n ∷ node@ and @f ∷ node → m a@,
+  --      @'forChildren_' n f ≡ 'forChildren' n f >> 'pure' ()@.
+  forChildren_
+    :: node
+    -- ^ A node @n@ whose children will be traversed in order.
+    -> (node -> m a)
+    -- ^ A function @f@ that will be run on each child.
+    -> m ()
+    -- ^ An action in the @m@ monad that has the effects associated with the
+    --   return values of all of the @f@ executions, sequenced according to
+    --   the order of the children.
+  forChildren_ n f = do
+    cs <- childrenOf n
+    mapM_ f cs
+
+preorderTraversal
+  :: (TreeLike m node)
+  => node
+  -> (node -> m a)
+  -> m (Vector a)
+preorderTraversal n f = do
+  vecs <- forChildren n $ \child -> do
+    first <- f child
+    rest  <- Vector.toList <$> preorderTraversal child f
+    pure (Vector.fromList (first : rest))
+  pure (Vector.concat (Vector.toList vecs))
+
+preorderTraversal_
+  :: (TreeLike m node)
+  => node
+  -> (node -> m a)
+  -> m ()
+preorderTraversal_ n f = do
+  forChildren_ n $ \child -> do
+    preorderTraversal_ child f
+
+--------------------------------------------------------------------------------
+
+-- instance TreeLike Identity (TTerm node var) where
+
+--------------------------------------------------------------------------------
+
+
+
+-- class PatternIndex index where
+--   addRule
+--     :: (PrimMonad m, Ord node, Hashable node, Ord var, Hashable var)
+--     => Equation node var
+--     -- ^ FIXME: doc
+--     -> index (PrimState m) node var
+--     -- ^ FIXME: doc
+--     -> m ()
+--     -- ^ FIXME: doc
+--   queryRule
+--     :: TreeLike (PrimState m) t
+--     -> (t -> m (Either node))
+
+-- pattern is (+ x (+ y z))
+-- graph is
+--     +_A --0--> 3
+--     +_A --1--> +_B
+--     +_B --0--> 5
+--     +_B --1--> 7
+-- (we need separate +_A and +_B because graphs have a set of vertices)
+--
+-- matching algorithm looks like this:
+-- Input: a pattern (e.g.: `(+ x (+ y z))`) and a node in the graph (e.g.: `+_A`)
+-- Step 1: If the top-level node of the pattern is a metavariable `m` and the node we are matching is `v`, return `Map.singleton m v`
+-- Step 2: Otherwise, the top-level node of the pattern is a constructor. Compare the constructor name (e.g.: `+`) to the label of the node in the graph (e.g.: `+`). If they are not equal, fail.
+-- Step 3: Suppose that the list of children of the top-level node of the pattern is called `pats :: [Pat]` and the list of children of the node in the graph paired with their edge weights is called `edges :: [(Int, Node)]`.
+-- Then return `Map.unionWith (\x y -> error "nonlinear not allowed") <$> mapM (uncurry match) (zip pats (map fst (sortBy (comparing fst) edges)))`.
 
 data MDiscriminationNet s node var
   = MkDNNode
@@ -62,6 +217,22 @@ new
   -- ^ FIXME: doc
 new = MkDNDisj <$> MVector.new 0
 
+-- Level-order traversal to get ([Either node var], rhs)
+-- Smoosh all those lists together to get a tree.
+
+-- levelOrder
+--   ::
+--   -> Vector (Either node var)
+
+newtype Position
+  = MkPosition (Vector Int)
+
+newtype PString a
+  = MkPString (Vector (Position, a))
+
+makePString :: TTerm node var -> PString (Either node var)
+makePString = undefined
+
 
 
 -- | FIXME: doc
@@ -74,8 +245,9 @@ addRule
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
-addRule eq = undefined -- (\dn -> fromMaybe dn (go (Equation.getLHS eq) dn))
-  where
+addRule eq dn = do
+  undefined
+    -- (\dn -> fromMaybe dn (go (Equation.getLHS eq) dn))
     -- go :: TTerm node var
     --    -> DiscriminationNet node var
     --    -> Maybe (DiscriminationNet node var)
