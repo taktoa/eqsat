@@ -88,7 +88,7 @@ class (IsExpression node expr) => TypeSystem node expr where
   --
   --   Laws:
   --
-  --   1. For any @e ∈ 'TypeError' expr@ and @p ∈ 'Proxy' expr@,
+  --   1. For any @e ∷ 'TypeError' expr@ and @p ∷ 'Proxy' expr@,
   --      @(\\_ → ()) '<$>' 'showTypeErrorANSI' p e ≡ 'showTypeError' p e@.
   showTypeErrorANSI
     :: TypeError expr

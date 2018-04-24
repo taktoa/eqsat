@@ -63,7 +63,7 @@ type Substitution a b
 --   1. The preimage of the metavariable typing function must be the same as the
 --      set of free variables of the underlying term.
 --   2. Denoting the metavariable typing function @m@ and the whole-term typing
---      function @w@ and the subtyping relation @(⊆) ∈ ty → ty → 'Bool'@,
+--      function @w@ and the subtyping relation @(⊆) ∷ ty → ty → 'Bool'@,
 --      if @θ@ is a substitution such that for every free variable @v@ of the
 --      underlying term, @((⊆) '<$>' θ v '<*>' m v) ≡ 'Just' 'True'@, then
 --      there exists a type @t@ such that @w θ ≡ 'Just' t@.

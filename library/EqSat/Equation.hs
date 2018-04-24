@@ -58,11 +58,11 @@ instance (Hashable node, Hashable var) => Hashable (Equation node var) where
 --   will be returned.
 --
 --   Laws:
---   * For any @(lhs, rhs) ∈ ('Term' node var, 'Term' node var)@,
+--   * For any @(lhs, rhs) ∷ ('Term' node var, 'Term' node var)@,
 --     @'Set.isSubsetOf' ('freeVars' rhs) ('freeVars' lhs) ≡ 'True'@
 --     implies that
 --     @'fromEquation' '<$>' 'makeEquation' (lhs, rhs) ≡ 'Just' (lhs, rhs)@.
---   * For any @(lhs, rhs) ∈ ('Term' node var, 'Term' node var)@,
+--   * For any @(lhs, rhs) ∷ ('Term' node var, 'Term' node var)@,
 --     @'Set.isSubsetOf' ('freeVars' rhs) ('freeVars' lhs) ≡ 'False'@
 --     implies that @'makeEquation' (lhs, rhs) ≡ 'Nothing'@.
 make
