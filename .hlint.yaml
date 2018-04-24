@@ -24,9 +24,18 @@
 
 - modules:
     # `base` (INCOMPLETE)
-    - {name: [Control.Monad.ST], as: ST}
-    - {name: [Data.STRef],       as: STRef}
-    - {name: [Data.IORef],       as: IORef}
+    - {name: [Control.Monad.ST],             within: []} # not specific
+    - {name: [Control.Monad.ST.Safe],        within: []} # deprecated
+    - {name: [Control.Monad.ST.Unsafe],      within: []} # not specific
+    - {name: [Control.Monad.ST.Lazy],        as: [ST, ST.Lazy]}
+    - {name: [Control.Monad.ST.Lazy.Safe],   within: []} # deprecated
+    - {name: [Control.Monad.ST.Lazy.Unsafe], as: [ST, ST.Lazy.Unsafe]}
+    - {name: [Control.Monad.ST.Strict],      as: [ST, ST.Strict]}
+    - {name: [Control.Monad.ST.Unsafe],      as: [ST, ST.Strict.Unsafe]}
+    - {name: [Data.STRef],                   within: []} # not specific
+    - {name: [Data.STRef.Lazy],              as: [STRef, STRef.Lazy]}
+    - {name: [Data.STRef.Strict],            as: [STRef, STRef.Strict]}
+    - {name: [Data.IORef],                   as: IORef}
 
     # `containers` (INCOMPLETE)
     - {name: [Data.Set],        as: Set}
