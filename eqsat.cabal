@@ -38,8 +38,13 @@ library
     hs-source-dirs:       library
     build-depends:        base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3
+                        , binary                      >= 0.8   && < 0.9
                         , bytestring                  >= 0.10  && < 0.11
+                        , cborg                       >= 0.2   && < 0.3
+                        , cborg-json                  >= 0.2   && < 0.3
+                        , cereal                      >= 0.5   && < 0.6
                         , containers                  >= 0.5   && < 0.6
+                        , contravariant               >= 1.4   && < 1.5
                         , data-partition              >= 0.3   && < 0.4
                         , deepseq                     >= 1.4   && < 1.5
                         , eigen                       >= 2.1   && < 2.2
@@ -60,6 +65,7 @@ library
                         , quickcheck-instances        >= 0.3   && < 0.4
                         , refined                     >= 0.1   && < 0.2
                         , sbv                         >= 7.5   && < 7.7
+                        , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
                         , system-filepath             >= 0.4   && < 0.5
                         , tasty                       >= 0.11  && < 0.12
@@ -75,6 +81,8 @@ library
                         , unordered-containers        >= 0.2   && < 0.3
                         , vector                      >= 0.12  && < 0.13
                         , vector-algorithms           >= 0.7   && < 0.8
+    if impl(ghc >= 8.2)
+        build-depends:    compact                     >= 0.1   && < 0.2
     exposed-modules:      EqSat
                         , EqSat.Term
                         , EqSat.TypedTerm
@@ -85,6 +93,7 @@ library
                         , EqSat.IsExpression
                         , EqSat.DiscriminationNet
                         , EqSat.Errors.CheckEquationError
+                        , EqSat.Internal.Compact
                         , EqSat.Internal.MHashSet
                         , EqSat.Internal.MHashMap
                         , EqSat.Internal.MBitmap
@@ -123,8 +132,13 @@ test-suite tests
     build-depends:        eqsat
                         , base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3
+                        , binary                      >= 0.8   && < 0.9
                         , bytestring                  >= 0.10  && < 0.11
+                        , cborg                       >= 0.2   && < 0.3
+                        , cborg-json                  >= 0.2   && < 0.3
+                        , cereal                      >= 0.5   && < 0.6
                         , containers                  >= 0.5   && < 0.6
+                        , contravariant               >= 1.4   && < 1.5
                         , data-partition              >= 0.3   && < 0.4
                         , deepseq                     >= 1.4   && < 1.5
                         , eigen                       >= 2.1   && < 2.2
@@ -145,6 +159,7 @@ test-suite tests
                         , quickcheck-instances        >= 0.3   && < 0.4
                         , refined                     >= 0.1   && < 0.2
                         , sbv                         >= 7.5   && < 7.7
+                        , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
                         , system-filepath             >= 0.4   && < 0.5
                         , tasty                       >= 0.11  && < 0.12
