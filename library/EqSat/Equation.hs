@@ -1,5 +1,9 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE DeriveGeneric #-}
+
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 module EqSat.Equation
   ( Equation
@@ -20,6 +24,10 @@ import qualified Data.Set      as Set
 import           EqSat.Term    (GTerm, TTerm, Term, freeVars)
 import qualified EqSat.Term    as Term
 
+import           Data.Hashable (Hashable (hashWithSalt))
+
+import           GHC.Generics  (Generic)
+
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
@@ -28,7 +36,18 @@ data Equation node var
     !(TTerm node var)
     !(GTerm node var)
     !(Set var)
-  deriving (Eq, Ord)
+  deriving (Generic)
+
+instance (Eq node, Eq var) => Eq (Equation node var) where
+  a == b = (from a) == (from b)
+
+instance (Ord node, Ord var) => Ord (Equation node var) where
+  compare a b = compare (from a) (from b)
+
+-- | FIXME: doc
+instance (Hashable node, Hashable var) => Hashable (Equation node var) where
+  hashWithSalt salt (UnsafeMkEquation lhs rhs _)
+    = salt `hashWithSalt` lhs `hashWithSalt` rhs
 
 --------------------------------------------------------------------------------
 

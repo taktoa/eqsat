@@ -1,11 +1,15 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE DeriveGeneric      #-}
-{-# LANGUAGE GADTs              #-}
-{-# LANGUAGE KindSignatures     #-}
-{-# LANGUAGE RoleAnnotations    #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DataKinds            #-}
+{-# LANGUAGE DeriveGeneric        #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE KindSignatures       #-}
+{-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE RoleAnnotations      #-}
+{-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 --------------------------------------------------------------------------------
 
@@ -41,11 +45,13 @@ import           Data.Void      (Void)
 
 import           GHC.Generics   (Generic)
 
+import           Data.Hashable  (Hashable (hashWithSalt))
+
 import           Flow           ((|>))
 
 import           EqSat.Variable (Variable)
 
-import           Refined        (NonNegative, Refined)
+import           Refined        (NonNegative, Refined, unrefine)
 
 --------------------------------------------------------------------------------
 
@@ -53,6 +59,8 @@ data TermRepr
   = TermReprG
   | TermReprT
   deriving (Generic)
+
+instance Hashable TermRepr
 
 type ReprG = 'TermReprG
 type ReprT = 'TermReprT
@@ -64,7 +72,7 @@ type ReprT = 'TermReprT
 data Term (repr :: TermRepr) node var where
   -- | A @ref@ node allows for observable sharing.
   MkRefTerm  :: !(Refined NonNegative Int)
-             -> Term 'TermReprG node var
+             -> Term ReprG node var
   -- | A @var@ node allows for metasyntactic variables.
   MkVarTerm  :: !var
              -> Term repr node var
@@ -80,10 +88,10 @@ deriving instance (Eq node, Eq var) => Eq (Term repr node var)
 deriving instance (Ord node, Ord var) => Ord (Term repr node var)
 
 -- | FIXME: doc
-type TTerm node var = Term 'TermReprT node var
+type TTerm node var = Term ReprT node var
 
 -- | FIXME: doc
-type GTerm node var = Term 'TermReprG node var
+type GTerm node var = Term ReprG node var
 
 -- | FIXME: doc
 instance Functor (Term repr node) where
@@ -91,6 +99,24 @@ instance Functor (Term repr node) where
   fmap f (MkVarTerm  var)     = MkVarTerm (f var)
   fmap f (MkNodeTerm node cs) = Vector.map (fmap f) cs
                                 |> MkNodeTerm node
+
+-- | FIXME: doc
+instance (Hashable node, Hashable var) => Hashable (TTerm node var) where
+  hashWithSalt salt
+    = (\case (MkVarTerm var) ->
+               salt `hashWithSalt` var
+             (MkNodeTerm node cs) ->
+               Vector.foldl' hashWithSalt (salt `hashWithSalt` node) cs)
+
+-- | FIXME: doc
+instance (Hashable node, Hashable var) => Hashable (GTerm node var) where
+  hashWithSalt salt
+    = (\case (MkRefTerm ref) ->
+               salt `hashWithSalt` unrefine ref
+             (MkVarTerm var) ->
+               salt `hashWithSalt` var
+             (MkNodeTerm node cs) ->
+               Vector.foldl' hashWithSalt (salt `hashWithSalt` node) cs)
 
 --------------------------------------------------------------------------------
 

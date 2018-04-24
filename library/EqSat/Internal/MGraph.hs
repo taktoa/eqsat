@@ -555,6 +555,18 @@ freezeToContainersGraph (MkSomeMGraph graph) = do
 
 --------------------------------------------------------------------------------
 
+-- Run Tarjan SCC on graph
+-- For each pair (x, y) of strongly-connected components:
+--   If the set of FIXME
+
+deduplicateGraph
+  :: (Eq v, Eq e, Hashable v, Hashable e)
+  => MGraph (PrimState m) g v e
+  -> m ()
+deduplicateGraph = undefined
+
+--------------------------------------------------------------------------------
+
 -- | FIXME: doc
 data AddEdgeResult
   = -- | FIXME: doc
