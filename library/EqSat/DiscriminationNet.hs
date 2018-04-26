@@ -3,7 +3,9 @@
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE InstanceSigs           #-}
 {-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MagicHash              #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
@@ -16,44 +18,53 @@ module EqSat.DiscriminationNet
 
 --------------------------------------------------------------------------------
 
-import           Control.Monad           (void)
+import           Control.Monad               (join, void)
+import           Control.Monad.Fail          (MonadFail)
 import           Control.Monad.Primitive
-import           Control.Monad.ST        (ST)
+import           Control.Monad.ST            (ST)
+import           Control.Monad.Trans.Class   (MonadTrans (lift))
 
 import           Data.Maybe
+import           Data.Monoid                 ((<>))
 
-import qualified Data.Foldable           as Foldable
-import           Data.Functor.Identity   (Identity)
+import qualified Data.Foldable               as Foldable
+import           Data.Functor.Identity       (Identity)
 
-import           Data.Hashable           (Hashable)
+import           Data.Hashable               (Hashable)
 
-import           Data.HashSet            (HashSet)
-import qualified Data.HashSet            as HashSet
+import           Data.HashSet                (HashSet)
+import qualified Data.HashSet                as HashSet
 
-import           Data.HashMap.Strict     (HashMap)
-import qualified Data.HashMap.Strict     as HashMap
+import           Data.HashMap.Strict         (HashMap)
+import qualified Data.HashMap.Strict         as HashMap
 
-import           Data.Vector             (Vector)
-import qualified Data.Vector             as Vector
+import           Data.Vector                 (Vector)
+import qualified Data.Vector.Generic         as GV
+import qualified Data.Vector.Generic.Mutable as GMV
+import           Data.Vector.Mutable         (MVector)
 
-import           Data.Vector.Mutable     (MVector)
-import qualified Data.Vector.Mutable     as MVector
-
-import           Data.STRef              (STRef)
-import qualified Data.STRef              as STRef
+import           Data.Primitive.MutVar       (MutVar)
+import qualified Data.Primitive.MutVar       as MutVar
 
 import           Flow
 
-import           EqSat.Term              (TTerm, Term (MkNodeTerm, MkVarTerm))
-import qualified EqSat.Term              as Term
+import qualified GHC.Prim
+import qualified GHC.Types
 
-import           EqSat.Equation          (Equation)
-import qualified EqSat.Equation          as Equation
+import           EqSat.Term
+                 (GTerm, TTerm, Term (MkNodeTerm, MkVarTerm))
+import qualified EqSat.Term                  as Term
 
-import           EqSat.Internal.MHashSet (MHashSet)
-import qualified EqSat.Internal.MHashSet as MHashSet
+import           EqSat.Equation              (Equation)
+import qualified EqSat.Equation              as Equation
 
-import           Refined                 (NonNegative, Refined)
+import           EqSat.Internal.MHashSet     (MHashSet)
+import qualified EqSat.Internal.MHashSet     as MHashSet
+
+import           EqSat.Internal.MStack       (MStack)
+import qualified EqSat.Internal.MStack       as MStack
+
+import           Refined                     (NonNegative, Refined)
 import qualified Refined
 
 --------------------------------------------------------------------------------
@@ -68,7 +79,7 @@ import qualified Refined
 --
 --   If the tree is impure, then @m@ will probably be @('PrimMonad' m) ⇒ m@
 --   or @'ST' s@ or 'IO'.
-class (Monad m, Eq node) => TreeLike m node | node -> m where
+class (Monad m, Eq node) => TreeLike m node where
   {-# MINIMAL childrenOf | forChildren #-}
 
   -- | Returns a 'Vector' containing all of the children of the given node
@@ -80,7 +91,7 @@ class (Monad m, Eq node) => TreeLike m node | node -> m where
   childrenOf
     :: node
     -- ^ A node.
-    -> m [node]
+    -> m (Vector node)
     -- ^ An @m@ action returning a 'Vector' of its children, in order.
   childrenOf n = forChildren n pure
 
@@ -98,7 +109,7 @@ class (Monad m, Eq node) => TreeLike m node | node -> m where
     -> m (Refined NonNegative Int)
     -- ^ An action returning the number of children that node has.
   numChildren n = do
-    len <- Vector.length <$> childrenOf n
+    len <- length <$> childrenOf n
     either fail pure (Refined.refine len)
 
   -- | Given a node @n ∷ node@ and a function @f ∷ node → m a@, run @f@ on each
@@ -113,7 +124,7 @@ class (Monad m, Eq node) => TreeLike m node | node -> m where
     -- ^ A node @n@ whose children will be traversed in order.
     -> (node -> m a)
     -- ^ A function @f@ that will be run on each child.
-    -> m [a]
+    -> m (Vector a)
     -- ^ An action in the @m@ monad that has the effects associated with the
     --   return values of all of the @f@ executions, sequenced according to
     --   the order of the children, collecting the results in a list.
@@ -144,33 +155,84 @@ class (Monad m, Eq node) => TreeLike m node | node -> m where
     mapM_ f cs
 
 preorderTraversal
-  :: (TreeLike m node)
+  :: forall m node vec a.
+     (PrimMonad m, GV.Vector vec a, TreeLike m node)
   => node
   -> (node -> m a)
-  -> m (Vector a)
-preorderTraversal n f = do
-  vecs <- forChildren n $ \child -> do
-    first <- f child
-    rest  <- Vector.toList <$> preorderTraversal child f
-    pure (Vector.fromList (first : rest))
-  pure (Vector.concat (Vector.toList vecs))
+  -> m (vec a)
+preorderTraversal n visit = do
+  output <- MStack.new
+  stack  <- MStack.new :: m (MStack.BMStack (PrimState m) node)
+  MStack.push stack n
+  let iterativeTraversal :: m ()
+      iterativeTraversal = do
+        join $ MStack.pop stack (pure ()) $ \node -> do
+          visit node >>= MStack.push output
+          forChildren node $ \child -> do
+            MStack.push stack child
+          iterativeTraversal
+  iterativeTraversal
+  MStack.freeze output
 
 preorderTraversal_
-  :: (TreeLike m node)
+  :: forall m node a.
+     (PrimMonad m, TreeLike m node)
   => node
   -> (node -> m a)
   -> m ()
-preorderTraversal_ n f = do
-  forChildren_ n $ \child -> do
-    preorderTraversal_ child f
+preorderTraversal_ n visit = do
+  stack <- MStack.new :: m (MStack.BMStack (PrimState m) node)
+  MStack.push stack n
+  let iterativeTraversal :: m ()
+      iterativeTraversal = do
+        join $ MStack.pop stack (pure ()) $ \node -> do
+          visit node
+          forChildren node $ \child -> do
+            MStack.push stack child
+          iterativeTraversal
+  iterativeTraversal
 
 --------------------------------------------------------------------------------
 
--- instance TreeLike Identity (TTerm node var) where
+-- | FIXME: doc
+instance (Monad m, Eq node, Eq var) => TreeLike m (TTerm node var) where
+  childrenOf
+    :: TTerm node var
+    -> m (Vector (TTerm node var))
+  childrenOf (Term.MkVarTerm  _)          = pure mempty
+  childrenOf (Term.MkNodeTerm _ children) = pure children
+
+  numChildren
+    :: TTerm node var
+    -> m (Refined NonNegative Int)
+  numChildren n = do
+    len <- length <$> childrenOf n
+    either error pure (Refined.refine len)
+
+  forChildren
+    :: TTerm node var
+    -> (TTerm node var -> m a)
+    -> m (Vector a)
+  forChildren n f = do
+    cs <- childrenOf n
+    mapM f cs
+
+  forChildren_
+    :: TTerm node var
+    -> (TTerm node var -> m a)
+    -> m ()
+  forChildren_ n f = do
+    cs <- childrenOf n
+    mapM_ f cs
+
+-- FIXME: add instance `(Eq node, Eq var) => TreeLike Identity (GTerm node var)`
+
+preorderTerm
+  :: TTerm node var
+  -> Vector (Either node var)
+preorderTerm = undefined
 
 --------------------------------------------------------------------------------
-
-
 
 -- class PatternIndex index where
 --   addRule
@@ -182,27 +244,12 @@ preorderTraversal_ n f = do
 --     -> m ()
 --     -- ^ FIXME: doc
 --   queryRule
---     :: TreeLike (PrimState m) t
---     -> (t -> m (Either node))
-
--- pattern is (+ x (+ y z))
--- graph is
---     +_A --0--> 3
---     +_A --1--> +_B
---     +_B --0--> 5
---     +_B --1--> 7
--- (we need separate +_A and +_B because graphs have a set of vertices)
---
--- matching algorithm looks like this:
--- Input: a pattern (e.g.: `(+ x (+ y z))`) and a node in the graph (e.g.: `+_A`)
--- Step 1: If the top-level node of the pattern is a metavariable `m` and the node we are matching is `v`, return `Map.singleton m v`
--- Step 2: Otherwise, the top-level node of the pattern is a constructor. Compare the constructor name (e.g.: `+`) to the label of the node in the graph (e.g.: `+`). If they are not equal, fail.
--- Step 3: Suppose that the list of children of the top-level node of the pattern is called `pats :: [Pat]` and the list of children of the node in the graph paired with their edge weights is called `edges :: [(Int, Node)]`.
--- Then return `Map.unionWith (\x y -> error "nonlinear not allowed") <$> mapM (uncurry match) (zip pats (map fst (sortBy (comparing fst) edges)))`.
+--     :: TreeLike m tree
+--     => tree
 
 data MDiscriminationNet s node var
   = MkDNNode
-    !(STRef s node)
+    !(MutVar s node)
     !(MVector s (MDiscriminationNet s node var))
   | MkDNDisj
     !(MVector s (MDiscriminationNet s node var))
@@ -215,7 +262,7 @@ new
   :: (PrimMonad m)
   => m (MDiscriminationNet (PrimState m) node var)
   -- ^ FIXME: doc
-new = MkDNDisj <$> MVector.new 0
+new = MkDNDisj <$> GMV.new 0
 
 -- Level-order traversal to get ([Either node var], rhs)
 -- Smoosh all those lists together to get a tree.
