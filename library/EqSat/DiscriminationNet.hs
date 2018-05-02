@@ -120,7 +120,7 @@ class (Monad m, Eq node) => TreeLike m node where
   --   Laws:
   --
   --   1. For any @n ∷ node@ and @f ∷ node → m a@,
-  --      @'forChildren' n f ≡ 'childrenOf' n >>= 'Vector.mapM' f@.
+  --      @'forChildren' n f ≡ 'childrenOf' n '>>=' 'Vector.mapM' f@.
   forChildren
     :: node
     -- ^ A node @n@ whose children will be traversed in order.
@@ -140,9 +140,9 @@ class (Monad m, Eq node) => TreeLike m node where
   --   Laws:
   --
   --   1. For any @n ∷ node@ and @f ∷ node → m a@,
-  --      @'forChildren_' n f ≡ 'childrenOf' n >>= 'Vector.mapM_' f@.
+  --      @'forChildren_' n f ≡ 'childrenOf' n '>>=' 'Vector.mapM_' f@.
   --   2. For any @n ∷ node@ and @f ∷ node → m a@,
-  --      @'forChildren_' n f ≡ 'forChildren' n f >> 'pure' ()@.
+  --      @'forChildren_' n f ≡ 'forChildren' n f '>>' 'pure' ()@.
   forChildren_
     :: node
     -- ^ A node @n@ whose children will be traversed in order.
@@ -233,6 +233,68 @@ preorderTerm
   :: TTerm node var
   -> Vector (Either node var)
 preorderTerm = undefined
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+class Trie (t :: * -> * -> *) where
+  -- | FIXME: doc
+  data Mut t :: * -> * -> * -> *
+
+  -- | FIXME: doc
+  mutTrieInsertWith
+    :: (PrimMonad m, GV.Vector vec k)
+    => Mut t (PrimState m) k v
+    -- ^ A mutable trie.
+    -> vec k
+    -- ^ A key-vector.
+    -> v
+    -- ^ The value to associate with this key-vector.
+    -> (v -> v -> m v)
+    -- ^ A callback that will be run with the old and new values respectively
+    --   to compute the result value, if the same key-vector has already been
+    --   inserted into the trie.
+    -> m ()
+    -- ^ A 'PrimMonad' action that associates the given key-vector with the
+    --   given value in the given mutable trie, using the given callback if
+    --   such an association was already present in the
+
+  -- | FIXME: doc
+  mutTrieFindChild
+    :: (PrimMonad m)
+    => Mut t (PrimState m) k v
+    -- ^ A mutable trie node.
+    -> k
+    -- ^ Key to find in the children of the current node.
+    -> (v -> m a)
+    -- ^ Callback to run if this is a leaf node.
+    -> (Maybe (Mut t (PrimState m) k v) -> m a)
+    -- ^ Callback to run if this is a branch node.
+    -> m a
+    -- ^ The result of the relevant callback.
+
+  -- | FIXME: doc
+  mutTrieForChildren
+    :: (PrimMonad m)
+    => Mut t (PrimState m) k v
+    -- ^ FIXME: doc
+    -> (k -> m a)
+    -- ^ FIXME: doc
+    -> m [a]
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  mutTrieForChildren_
+    :: (PrimMonad m)
+    => Mut t (PrimState m) k v
+    -- ^ FIXME: doc
+    -> (k -> m ())
+    -- ^ FIXME: doc
+    -> m ()
+    -- ^ FIXME: doc
+  mutTrieForChildren_ trie callback = do
+    mutTrieForChildren trie callback
+    pure ()
 
 --------------------------------------------------------------------------------
 
