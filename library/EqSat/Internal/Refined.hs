@@ -184,6 +184,7 @@ refine x = do
     validate (predicateByResult result) x
     pure (Refined x)
 {-# INLINABLE refine #-}
+
 -- | FIXME: doc
 refineThrow :: (Predicate p x, MonadThrow m) => x -> m (Refined p x)
 refineThrow = refine .> either MonadThrow.throwM pure
@@ -195,8 +196,6 @@ refineFail = refine .> either (displayException .> fail) pure
 {-# INLINABLE refineFail #-}
 
 -- | FIXME: doc
---
---   WARNING: this function is not total!
 refineError :: (Predicate p x, MonadError RefineException m)
             => x -> m (Refined p x)
 refineError = refine .> either MonadError.throwError pure
