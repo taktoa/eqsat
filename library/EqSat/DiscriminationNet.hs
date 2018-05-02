@@ -1,5 +1,6 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE DefaultSignatures      #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -64,8 +65,8 @@ import qualified EqSat.Internal.MHashSet     as MHashSet
 import           EqSat.Internal.MStack       (MStack)
 import qualified EqSat.Internal.MStack       as MStack
 
-import           Refined                     (NonNegative, Refined)
-import qualified Refined
+import           EqSat.Internal.Refined      (NonNegative, Refined)
+import qualified EqSat.Internal.Refined      as Refined
 
 --------------------------------------------------------------------------------
 
@@ -108,9 +109,10 @@ class (Monad m, Eq node) => TreeLike m node where
     -- ^ A node.
     -> m (Refined NonNegative Int)
     -- ^ An action returning the number of children that node has.
+  default numChildren :: (MonadFail m) => node -> m (Refined NonNegative Int)
   numChildren n = do
     len <- length <$> childrenOf n
-    either fail pure (Refined.refine len)
+    Refined.refineFail len
 
   -- | Given a node @n ∷ node@ and a function @f ∷ node → m a@, run @f@ on each
   --   child of @n@ in order, collecting the results into a @[a]@.
@@ -195,7 +197,7 @@ preorderTraversal_ n visit = do
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-instance (Monad m, Eq node, Eq var) => TreeLike m (TTerm node var) where
+instance (MonadFail m, Eq node, Eq var) => TreeLike m (TTerm node var) where
   childrenOf
     :: TTerm node var
     -> m (Vector (TTerm node var))
@@ -207,7 +209,7 @@ instance (Monad m, Eq node, Eq var) => TreeLike m (TTerm node var) where
     -> m (Refined NonNegative Int)
   numChildren n = do
     len <- length <$> childrenOf n
-    either error pure (Refined.refine len)
+    Refined.refineFail len
 
   forChildren
     :: TTerm node var

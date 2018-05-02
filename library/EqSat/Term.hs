@@ -35,23 +35,23 @@ module EqSat.Term
 
 --------------------------------------------------------------------------------
 
-import           Data.Set       (Set)
-import qualified Data.Set       as Set
+import           Data.Set               (Set)
+import qualified Data.Set               as Set
 
-import           Data.Vector    (Vector)
-import qualified Data.Vector    as Vector
+import           Data.Vector            (Vector)
+import qualified Data.Vector            as Vector
 
-import           Data.Void      (Void)
+import           Data.Void              (Void)
 
-import           GHC.Generics   (Generic)
+import           GHC.Generics           (Generic)
 
-import           Data.Hashable  (Hashable (hashWithSalt))
+import           Data.Hashable          (Hashable (hashWithSalt))
 
-import           Flow           ((|>))
+import           Flow                   ((|>))
 
-import           EqSat.Variable (Variable)
+import           EqSat.Variable         (Variable)
 
-import           Refined        (NonNegative, Refined, unrefine)
+import           EqSat.Internal.Refined (NonNegative, Refined, unrefine)
 
 --------------------------------------------------------------------------------
 
