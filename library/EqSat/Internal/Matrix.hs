@@ -1,12 +1,15 @@
 --------------------------------------------------------------------------------
 
+{-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE InstanceSigs           #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE Trustworthy            #-}
+{-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
@@ -16,6 +19,7 @@
 -- | FIXME: doc
 module EqSat.Internal.Matrix
   ( module EqSat.Internal.Matrix -- FIXME: specific export list
+  , Eigen.Elem
   ) where
 
 --------------------------------------------------------------------------------
@@ -125,6 +129,16 @@ data Mutability
     Mutable
   deriving (Eq, Show, Read)
 
+-- | This constraint is solvable for any @p ∷ 'Packing'@.
+type IsPacking p
+  = ( IsMatrix p
+    , IsMutableMatrix p
+    , ConvertMatrix p 'Dense
+    , ConvertMatrix p 'Sparse
+    , ConvertMatrix 'Dense  p
+    , ConvertMatrix 'Sparse p
+    )
+
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
@@ -155,7 +169,7 @@ type Unique a = a
 class IsMatrix (p :: Packing) where
   -- | Create a new 'Matrix' filled with zeroes
   --   (as defined by the 'Elem' instance).
-  zeroMatrix
+  zero
     :: (Eigen.Elem a b)
     => MatrixShape
     -- ^ FIXME: doc
@@ -163,7 +177,7 @@ class IsMatrix (p :: Packing) where
     -- ^ FIXME: doc
 
   -- | Convert a 'Matrix' to a 'MutableMatrix' with the same packing.
-  thawMatrix
+  thaw
     :: (PrimMonad m, Eigen.Elem a b)
     => Matrix p a b
     -- ^ An immutable matrix to thaw.
@@ -176,7 +190,7 @@ class IsMatrix (p :: Packing) where
   --   If Haskell had uniqueness types, this function would be safe, as the
   --   function could take a unique 'Matrix', guaranteeing that there are no
   --   copies lingering around to break referential transparency.
-  unsafeThawMatrix
+  unsafeThaw
     :: (PrimMonad m, Eigen.Elem a b)
     => Unique (Matrix p a b)
     -- ^ An immutable matrix to thaw.
@@ -184,7 +198,7 @@ class IsMatrix (p :: Packing) where
     -- ^ A 'PrimMonad' action returning the thawed (mutable) matrix.
 
   -- | Get the shape of the given matrix.
-  shapeMatrix
+  shape
     :: (Eigen.Elem a b)
     => Matrix p a b
     -- ^ A matrix to get the shape of.
@@ -192,8 +206,9 @@ class IsMatrix (p :: Packing) where
     -- ^ The shape of that matrix.
 
   -- | FIXME: doc
-  coeffMatrix
-    :: MatrixPos
+  coeff
+    :: (Eigen.Elem a b)
+    => MatrixPos
     -- ^ FIXME: doc
     -> Matrix p a b
     -- ^ FIXME: doc
@@ -201,16 +216,37 @@ class IsMatrix (p :: Packing) where
     -- ^ FIXME: doc
 
   -- | FIXME: doc
-  unsafeCoeffMatrix
-    :: MatrixPos
+  unsafeCoeff
+    :: (Eigen.Elem a b)
+    => MatrixPos
     -- ^ FIXME: doc
     -> Matrix p a b
     -- ^ FIXME: doc
     -> a
     -- ^ FIXME: doc
 
+  -- | FIXME: doc
+  imap
+    :: (Eigen.Elem a b)
+    => (MatrixPos -> a -> a)
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  imapNonZeros
+    :: (Eq a, Eigen.Elem a b)
+    => (MatrixPos -> a -> a)
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+
   -- | Add two matrices together.
-  addMatrix
+  add
     :: (Eigen.Elem a b)
     => Matrix p a b
     -- ^ The left hand side of the addition.
@@ -220,7 +256,7 @@ class IsMatrix (p :: Packing) where
     -- ^ The sum of the two given matrices.
 
   -- | Subtract one matrix from another.
-  subMatrix
+  sub
     :: (Eigen.Elem a b)
     => Matrix p a b
     -- ^ The left hand side of the subtraction.
@@ -230,7 +266,7 @@ class IsMatrix (p :: Packing) where
     -- ^ The difference between the two given matrices.
 
   -- | Compute the product of two matrices.
-  mulMatrix
+  mul
     :: (Eigen.Elem a b)
     => Matrix p a b
     -- ^ The left hand side of the product.
@@ -239,12 +275,39 @@ class IsMatrix (p :: Packing) where
     -> Unique (Matrix p a b)
     -- ^ The product of the two given matrices.
 
+  -- | Scale the given matrix by the given scalar.
+  scale
+    :: (Eigen.Elem a b)
+    => a
+    -- ^ A scalar to multiply by a matrix.
+    -> Matrix p a b
+    -- ^ A matrix that will be scaled by the scalar.
+    -> Unique (Matrix p a b)
+    -- ^ The scaled matrix.
+
+  -- | Transpose a matrix.
+  transpose
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix.
+    -> Unique (Matrix p a b)
+    -- ^ The result of transposing that matrix.
+
+  -- | Compute the adjoint of a matrix.
+  adjoint
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix.
+    -> Unique (Matrix p a b)
+    -- ^ The adjoint of that matrix.
+
   -- | Encode an immutable matrix as a lazy bytestring.
   --
   --   Laws:
-  --     * @('decodeMatrix' '.' 'encodeMatrix' \@'Sparse') ≡ 'id'@
-  --     * @('decodeMatrix' '.' 'encodeMatrix' \@'Dense')  ≡ 'id'@
-  encodeMatrix
+  --
+  --   1. For any @p ∷ 'Packing'@,
+  --      @('decodeMatrix' '.' 'encodeMatrix' \@p) ≡ 'id'@.
+  encode
     :: (Eigen.Elem a b)
     => Matrix p a b
     -- ^ An immutable matrix to encode.
@@ -256,9 +319,10 @@ class IsMatrix (p :: Packing) where
   --   WARNING: this function is partial.
   --
   --   Laws:
-  --     * @('decodeMatrix' '.' 'encodeMatrix' \@'Sparse') ≡ 'id'@
-  --     * @('decodeMatrix' '.' 'encodeMatrix' \@'Dense')  ≡ 'id'@
-  decodeMatrix
+  --
+  --   1. For any @p ∷ 'Packing'@,
+  --      @('decodeMatrix' '.' 'encodeMatrix' \@p) ≡ 'id'@.
+  decode
     :: (Eigen.Elem a b)
     => LBS.ByteString
     -- ^ A matrix encoded as a lazy bytestring with 'encodeMatrix'.
@@ -267,45 +331,61 @@ class IsMatrix (p :: Packing) where
 
 -- | FIXME: doc
 instance IsMatrix 'Dense where
-  zeroMatrix        = uncurry Eigen.Matrix.zero
-  thawMatrix        = Eigen.Matrix.thaw
-  unsafeThawMatrix  = Eigen.Matrix.unsafeThaw
-  shapeMatrix       = Eigen.Matrix.dims
-  addMatrix         = (+)
-  subMatrix         = (-)
-  mulMatrix         = (*)
-  encodeMatrix      = Eigen.Matrix.encode
-  decodeMatrix      = Eigen.Matrix.decode
-  coeffMatrix       = undefined
-  unsafeCoeffMatrix = undefined
-
+  zero         = uncurry Eigen.Matrix.zero
+  thaw         = Eigen.Matrix.thaw
+  unsafeThaw   = Eigen.Matrix.unsafeThaw
+  shape        = Eigen.Matrix.dims
+  imap         = (\f -> Eigen.Matrix.imap (curry f))
+  imapNonZeros = (\f -> Eigen.Matrix.imap (\r c x -> if x == 0
+                                                     then 0
+                                                     else f (r, c) x))
+  add          = (+)
+  sub          = (-)
+  mul          = (*)
+  scale        = (\s -> Eigen.Matrix.map (* s))
+  transpose    = Eigen.Matrix.transpose
+  adjoint      = Eigen.Matrix.adjoint
+  encode       = Eigen.Matrix.encode
+  decode       = Eigen.Matrix.decode
+  coeff        = uncurry Eigen.Matrix.coeff
+  unsafeCoeff  = uncurry Eigen.Matrix.unsafeCoeff
 
 -- | FIXME: doc
 instance IsMatrix 'Sparse where
-  zeroMatrix (x, y) = Eigen.SparseMatrix.fromList x y []
-  thawMatrix matrix = do
+  zero (x, y) = Eigen.SparseMatrix.fromList x y []
+  thaw matrix = do
     -- FIXME: verify that this is safe
     m <- unsafeIOToPrim (Eigen.SparseMatrix.thaw matrix)
     pure (MSparseMatrix m)
-  unsafeThawMatrix matrix = do
+  unsafeThaw matrix = do
     -- FIXME: verify that this is safe
     m <- unsafeIOToPrim (Eigen.SparseMatrix.unsafeThaw matrix)
     pure (MSparseMatrix m)
-  shapeMatrix = Eigen.SparseMatrix.rows &&& Eigen.SparseMatrix.cols
-  addMatrix    = (+)
-  subMatrix    = (-)
-  mulMatrix    = (*)
-  encodeMatrix = Eigen.SparseMatrix.encode
-  decodeMatrix = Eigen.SparseMatrix.decode
-  coeffMatrix       = undefined
-  unsafeCoeffMatrix = undefined
+  shape        = Eigen.SparseMatrix.rows &&& Eigen.SparseMatrix.cols
+  imap         = (\f -> convert .> imap @'Dense f .> convert)
+  imapNonZeros = (\f m -> Eigen.SparseMatrix.uncompress m
+                          |> Eigen.SparseMatrix.toList
+                          |> map (\(r, c, x) -> (r, c, f (r, c) x))
+                          |> (Eigen.SparseMatrix.fromList
+                              (Eigen.SparseMatrix.rows m)
+                              (Eigen.SparseMatrix.cols m)))
+  add          = (+)
+  sub          = (-)
+  mul          = (*)
+  scale        = Eigen.SparseMatrix.scale
+  transpose    = Eigen.SparseMatrix.transpose
+  adjoint      = Eigen.SparseMatrix.adjoint
+  encode       = Eigen.SparseMatrix.encode
+  decode       = Eigen.SparseMatrix.decode
+  coeff        = uncurry Eigen.SparseMatrix.coeff
+  unsafeCoeff  = uncurry Eigen.SparseMatrix.coeff
 
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
 class IsMutableMatrix (p :: Packing) where
   -- | Create a new 'MutableMatrix' with the given shape.
-  newMutableMatrix
+  newMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MatrixShape
     -- ^ The shape of the 'MutableMatrix' to create.
@@ -318,7 +398,7 @@ class IsMutableMatrix (p :: Packing) where
   --   This does nothing for dense matrices, but for sparse matrices it checks
   --   that the matrix is in compressed mode, compresses it if it is not, and
   --   then preallocates the given number of elements.
-  reserveMutableMatrix
+  reserveMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => Int
     -- ^ The number of nonzero elements you want to preallocate.
@@ -330,7 +410,7 @@ class IsMutableMatrix (p :: Packing) where
   -- | Returns a boolean representing whether the given 'MutableMatrix' is
   --   valid; for sparse matrices this is always true but for dense matrices
   --   it may return 'False'.
-  validMutableMatrix
+  validMutable
     :: (Eigen.Elem a b)
     => MutableMatrix p a b s
     -- ^ The 'MutableMatrix' to check the validity of.
@@ -340,7 +420,7 @@ class IsMutableMatrix (p :: Packing) where
   -- | Get the element of the given matrix at the given position.
   --
   --   This function will throw an exception if the position is out of bounds.
-  getMutableMatrix
+  getMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ The matrix in which an element will be retrieved.
@@ -352,7 +432,7 @@ class IsMutableMatrix (p :: Packing) where
 
   -- | Like 'getMutableMatrix', but potentially with better performance, and
   --   bounds-checking is not guaranteed.
-  unsafeGetMutableMatrix
+  unsafeGetMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ The matrix in which an element will be retrieved.
@@ -366,7 +446,7 @@ class IsMutableMatrix (p :: Packing) where
   --   value.
   --
   --   This function will throw an exception if the position is out of bounds.
-  setMutableMatrix
+  setMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ The matrix to modify.
@@ -380,7 +460,7 @@ class IsMutableMatrix (p :: Packing) where
 
   -- | Like 'setMutableMatrix', but potentially with better performance, and
   --   bounds-checking is not guaranteed.
-  unsafeSetMutableMatrix
+  unsafeSetMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ The matrix to modify.
@@ -393,7 +473,7 @@ class IsMutableMatrix (p :: Packing) where
     --   given matrix to the given value.
 
   -- | Convert a 'MutableMatrix' to a 'Matrix' with the same packing.
-  freezeMutableMatrix
+  freezeMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ The 'MutableMatrix' to freeze.
@@ -406,7 +486,7 @@ class IsMutableMatrix (p :: Packing) where
   --   If Haskell had uniqueness types, this function would be safe, as the
   --   function could take a unique 'MutableMatrix', guaranteeing that there
   --   are no copies lingering around to break referential transparency.
-  unsafeFreezeMutableMatrix
+  unsafeFreezeMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => Unique (MutableMatrix p a b (PrimState m))
     -- ^ The 'MutableMatrix' to freeze.
@@ -414,7 +494,7 @@ class IsMutableMatrix (p :: Packing) where
     -- ^ An immutable 'Matrix'.
 
   -- | Returns the shape of the given 'MutableMatrix'.
-  shapeMutableMatrix
+  shapeMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p a b (PrimState m)
     -- ^ A 'MutableMatrix' to find the shape of.
@@ -423,46 +503,46 @@ class IsMutableMatrix (p :: Packing) where
 
 -- | FIXME: doc
 instance IsMutableMatrix 'Dense where
-  newMutableMatrix          = uncurry Eigen.MMatrix.new
-  reserveMutableMatrix _ _  = pure ()
-  validMutableMatrix        = Eigen.MMatrix.valid
-  getMutableMatrix          = Eigen.MMatrix.read  .> uncurry
-  setMutableMatrix          = Eigen.MMatrix.write .> uncurry
-  unsafeGetMutableMatrix    = Eigen.MMatrix.unsafeRead  .> uncurry
-  unsafeSetMutableMatrix    = Eigen.MMatrix.unsafeWrite .> uncurry
-  freezeMutableMatrix       = Eigen.Matrix.freeze
-  unsafeFreezeMutableMatrix = Eigen.Matrix.unsafeFreeze
-  shapeMutableMatrix        = (Eigen.MMatrix.mm_rows &&& Eigen.MMatrix.mm_cols)
-                              .> pure
+  newMutable          = uncurry Eigen.MMatrix.new
+  reserveMutable _ _  = pure ()
+  validMutable        = Eigen.MMatrix.valid
+  getMutable          = Eigen.MMatrix.read  .> uncurry
+  setMutable          = Eigen.MMatrix.write .> uncurry
+  unsafeGetMutable    = Eigen.MMatrix.unsafeRead  .> uncurry
+  unsafeSetMutable    = Eigen.MMatrix.unsafeWrite .> uncurry
+  freezeMutable       = Eigen.Matrix.freeze
+  unsafeFreezeMutable = Eigen.Matrix.unsafeFreeze
+  shapeMutable        = (Eigen.MMatrix.mm_rows &&& Eigen.MMatrix.mm_cols)
+                        .> pure
 
 -- | FIXME: doc
 instance IsMutableMatrix 'Sparse where
-  newMutableMatrix (x, y) = do
+  newMutable (x, y) = do
     -- FIXME: verify that this is safe
     m <- unsafeIOToPrim (Eigen.IOSparseMatrix.new x y)
     pure (MSparseMatrix m)
-  reserveMutableMatrix space matrix = do
+  reserveMutable space matrix = do
     let (MSparseMatrix m) = matrix
     -- FIXME: verify that this is safe
     unsafeIOToPrim (Eigen.IOSparseMatrix.reserve m space)
-  validMutableMatrix = const True
-  getMutableMatrix matrix (x, y) = do
+  validMutable = const True
+  getMutable matrix (x, y) = do
     -- FIXME: verify that this is safe
     unsafeIOToPrim (Eigen.IOSparseMatrix.read (coerce matrix) x y)
-  setMutableMatrix matrix (x, y) el = do
+  setMutable matrix (x, y) el = do
     -- FIXME: verify that this is safe
     unsafeIOToPrim (Eigen.IOSparseMatrix.write (coerce matrix) x y el)
-  unsafeGetMutableMatrix = getMutableMatrix
-  unsafeSetMutableMatrix = setMutableMatrix
-  freezeMutableMatrix matrix = do
+  unsafeGetMutable = getMutable
+  unsafeSetMutable = setMutable
+  freezeMutable matrix = do
     let (MSparseMatrix m) = matrix
     -- FIXME: verify that this is safe
     unsafeIOToPrim (Eigen.SparseMatrix.freeze m)
-  unsafeFreezeMutableMatrix matrix = do
+  unsafeFreezeMutable matrix = do
     let (MSparseMatrix m) = matrix
     -- FIXME: verify that this is safe
     unsafeIOToPrim (Eigen.SparseMatrix.unsafeFreeze m)
-  shapeMutableMatrix matrix = do
+  shapeMutable matrix = do
     let (MSparseMatrix m) = matrix
     -- FIXME: verify that this is safe
     r <- unsafeIOToPrim (Eigen.IOSparseMatrix.rows m)
@@ -482,15 +562,15 @@ class ConvertMatrix (p1 :: Packing) (p2 :: Packing) where
   --   @
   --     {-# LANGUAGE TypeApplications #-}
   --
-  --     toSparse :: ('Eigen.Elem' a b)
-  --              => 'Matrix' p a b -> 'Matrix' 'Sparse' a b
+  --     toSparse ∷ ('Eigen.Elem' a b)
+  --              ⇒ 'Matrix' p a b → 'Matrix' 'Sparse' a b
   --     toSparse = 'convertMatrix' \@_ \@'Sparse'
   --
-  --     fromSparse :: ('Eigen.Elem' a b)
-  --                => 'Matrix' 'Sparse' a b -> 'Matrix' p a b
+  --     fromSparse ∷ ('Eigen.Elem' a b)
+  --                ⇒ 'Matrix' 'Sparse' a b → 'Matrix' p a b
   --     fromSparse = 'convertMatrix' \@'Sparse' \@_
   --   @
-  convertMatrix
+  convert
     :: (Eigen.Elem a b)
     => Matrix p1 a b
     -- ^ A matrix to convert the representation of.
@@ -507,7 +587,7 @@ class ConvertMatrix (p1 :: Packing) (p2 :: Packing) where
   --   the frozen matrix (another copy), and then unsafely thaw the result
   --   (this is safe because we know that we just created this copy, so no
   --   other references to it can exist).
-  convertMutableMatrix
+  convertMutable
     :: (PrimMonad m, Eigen.Elem a b)
     => MutableMatrix p1 a b (PrimState m)
     -- ^ A mutable matrix to convert the representation of.
@@ -516,45 +596,45 @@ class ConvertMatrix (p1 :: Packing) (p2 :: Packing) where
 
 -- | Trivial; @'convertMatrix' = 'id'@ and @'convertMutableMatrix' = 'pure'@.
 instance ConvertMatrix 'Dense 'Dense where
-  convertMatrix = id
-  convertMutableMatrix = pure
+  convert = id
+  convertMutable = pure
 
 -- | Trivial; @'convertMatrix' = 'id'@ and @'convertMutableMatrix' = 'pure'@.
 instance ConvertMatrix 'Sparse 'Sparse where
-  convertMatrix = id
-  convertMutableMatrix = pure
+  convert = id
+  convertMutable = pure
 
 -- | Nontrivial; 'convertMatrix' uses 'Eigen.SparseMatrix.fromMatrix'
 --   and 'convertMutableMatrix' delegates to 'convertMatrix' by freezing,
 --   converting, and then thawing.
 instance ConvertMatrix 'Dense 'Sparse where
-  convertMatrix = Eigen.SparseMatrix.fromMatrix
-  convertMutableMatrix = freezeMutableMatrix
-                         >=> (convertMatrix .> pure)
-                         >=> unsafeThawMatrix
+  convert = Eigen.SparseMatrix.fromMatrix
+  convertMutable = freezeMutable
+                   >=> (convert .> pure)
+                   >=> unsafeThaw
 
 -- | Nontrivial; 'convertMatrix' uses 'Eigen.SparseMatrix.toMatrix'
 --   and 'convertMutableMatrix' delegates to 'convertMatrix' by freezing,
 --   converting, and then thawing.
 instance ConvertMatrix 'Sparse 'Dense where
-  convertMatrix = Eigen.SparseMatrix.toMatrix
-  convertMutableMatrix = freezeMutableMatrix
-                         >=> (convertMatrix .> pure)
-                         >=> unsafeThawMatrix
+  convert = Eigen.SparseMatrix.toMatrix
+  convertMutable = freezeMutable
+                   >=> (convert .> pure)
+                   >=> unsafeThaw
 
 --------------------------------------------------------------------------------
 
 -- | Checks whether the given immutable sparse matrix is in compressed mode.
-isCompressedSparseMatrix
+sparseIsCompressed
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
   -- ^ An immutable sparse matrix.
   -> Bool
   -- ^ 'True' if the matrix was in compressed mode, 'False' otherwise.
-isCompressedSparseMatrix = Eigen.SparseMatrix.compressed
+sparseIsCompressed = Eigen.SparseMatrix.compressed
 
 -- | Convert the given immutable sparse matrix to compressed mode.
-compressSparseMatrix
+sparseCompress
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
   -- ^ An immutable sparse matrix that may not be in compressed mode.
@@ -562,10 +642,10 @@ compressSparseMatrix
   --   FIXME: is it true that matrices in compressed mode are tolerated?
   -> Matrix 'Sparse a b
   -- ^ An immutable sparse matrix in compressed mode with the same data.
-compressSparseMatrix = Eigen.SparseMatrix.compress
+sparseCompress = Eigen.SparseMatrix.compress
 
 -- | Convert the given immutable sparse matrix to uncompressed mode.
-uncompressSparseMatrix
+sparseUncompress
   :: (Eigen.Elem a b)
   => Matrix 'Sparse a b
   -- ^ An immutable sparse matrix that may be in compressed mode.
@@ -573,24 +653,24 @@ uncompressSparseMatrix
   --   FIXME: is it true that matrices not in compressed mode are tolerated?
   -> Matrix 'Sparse a b
   -- ^ An immutable sparse matrix in uncompressed mode with the same data.
-uncompressSparseMatrix = Eigen.SparseMatrix.uncompress
+sparseUncompress = Eigen.SparseMatrix.uncompress
 
 --------------------------------------------------------------------------------
 
 -- | Checks whether the given mutable sparse matrix is in compressed mode.
-isCompressedSparseMutableMatrix
+sparseMutableIsCompressed
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
   -- ^ A mutable sparse matrix.
   -> m Bool
   -- ^ A 'PrimMonad' action returning 'True' if the given matrix was in
   --   compressed mode and 'False' otherwise.
-isCompressedSparseMutableMatrix matrix = do
+sparseMutableIsCompressed matrix = do
   let (MSparseMatrix m) = matrix
   unsafeIOToPrim (Eigen.IOSparseMatrix.compressed m)
 
 -- | Convert the given mutable sparse matrix to compressed mode.
-compressSparseMutableMatrix
+sparseMutableCompress
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
   -- ^ A mutable sparse matrix that may be in compressed mode.
@@ -598,12 +678,12 @@ compressSparseMutableMatrix
   --   FIXME: is it true that matrices in compressed mode are tolerated?
   -> m ()
   -- ^ A 'PrimMonad' action that converts the matrix to compressed mode.
-compressSparseMutableMatrix matrix = do
+sparseMutableCompress matrix = do
   let (MSparseMatrix m) = matrix
   unsafeIOToPrim (Eigen.IOSparseMatrix.compress m)
 
 -- | Convert the given mutable sparse matrix to uncompressed mode.
-uncompressSparseMutableMatrix
+sparseMutableUncompress
   :: (PrimMonad m, Eigen.Elem a b)
   => MutableMatrix 'Sparse a b (PrimState m)
   -- ^ A mutable sparse matrix that may be in compressed mode.
@@ -611,7 +691,7 @@ uncompressSparseMutableMatrix
   --   FIXME: is it true that matrices not in compressed mode are tolerated?
   -> m ()
   -- ^ A 'PrimMonad' action that converts the matrix to uncompressed mode.
-uncompressSparseMutableMatrix matrix = do
+sparseMutableUncompress matrix = do
   let (MSparseMatrix m) = matrix
   unsafeIOToPrim (Eigen.IOSparseMatrix.uncompress m)
 
@@ -629,20 +709,21 @@ invertSquareMatrix
 
 -- | Uses the Gershgorin circle theorem to check if the given sparse matrix
 --   is positive-definite.
-isPositiveDefinite :: (PrimMonad m, Eigen.Elem a b, Ord a)
-                   => MutableMatrix 'Sparse a b (PrimState m)
-                   -> m Bool
+isPositiveDefinite
+  :: (PrimMonad m, Eigen.Elem a b, Ord a)
+  => MutableMatrix 'Sparse a b (PrimState m)
+  -> m Bool
 isPositiveDefinite matrix = either id id <$> do
   ExceptT.runExceptT $ do
     let earlyReturn = ExceptT.throwE
 
-    (numRows, numCols) <- lift $ shapeMutableMatrix matrix
+    (numRows, numCols) <- lift $ shapeMutable matrix
 
     -- A positive-definite matrix is square by definition, so if the given
     -- matrix is not square then we return false.
     when (numRows /= numCols) $ earlyReturn False
 
-    frozen <- lift (uncompressSparseMatrix <$> freezeMutableMatrix matrix)
+    frozen <- lift (sparseUncompress <$> freezeMutable matrix)
 
     -- Check if the matrix is diagonal, and if it is, return early with the
     -- boolean representing whether all entries of the diagonal are positive,
@@ -656,8 +737,8 @@ isPositiveDefinite matrix = either id id <$> do
       -- Compute the Gershgorin circles.
       pairs <- forM [0 .. numRows - 1] $ \i -> do
         (center, radius) <- lift $ do
-          c <- unsafeGetMutableMatrix matrix (i, i)
-          r <- [ abs <$> unsafeGetMutableMatrix matrix (i, j)
+          c <- unsafeGetMutable matrix (i, i)
+          r <- [ abs <$> unsafeGetMutable matrix (i, j)
                | j <- [0 .. numCols - 1]
                ] |> sequenceA |> fmap (sum .> (\x -> x - c))
           pure (c, r)
