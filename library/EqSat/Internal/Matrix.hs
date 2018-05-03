@@ -3,10 +3,10 @@
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE InstanceSigs           #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE MultiWayIf             #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE Trustworthy            #-}
 {-# LANGUAGE TypeApplications       #-}
@@ -106,12 +106,12 @@ newtype MSparseMatrix a b s
 --------------------------------------------------------------------------------
 
 -- | This datatype is meant to be used with the @-XDataKinds@ language extension
---   to tag whether a matrix is meant to be _dense_ or _sparse_.
+--   to tag whether a matrix is meant to be /dense/ or /sparse/.
 --
---   A _dense_ matrix is an in-memory representation of an @m × n@ matrix valued
+--   A /dense/ matrix is an in-memory representation of an @m × n@ matrix valued
 --   in a semiring @R@ that uses @Θ(m · n · log₂(|R|))@ bits of storage.
 --
---   A _sparse_ matrix is an in-memory representation of an @m × n@ matrix @M@
+--   A /sparse/ matrix is an in-memory representation of an @m × n@ matrix @M@
 --   valued in a semiring @R@ that uses @Θ(nnz(M) · log₂(|R|))@ bits of storage,
 --   where @nnz(M)@ is the number of nonzero elements of @M@.
 data Packing
@@ -154,10 +154,13 @@ type family MutableMatrix (p :: Packing) = mat | mat -> p where
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-type MatrixPos = (Int, Int) -- FIXME: use newtype instead?
+type MatrixIndex = Int -- FIXME: use `Refined NonNegative Int` instead?
 
 -- | FIXME: doc
-type MatrixShape = (Int, Int) -- FIXME: use newtype instead?
+type MatrixPos = (MatrixIndex, MatrixIndex) -- FIXME: use newtype instead?
+
+-- | FIXME: doc
+type MatrixShape = (MatrixIndex, MatrixIndex) -- FIXME: use newtype instead?
 
 -- | This is used to document that a function consumes its argument (so it must
 --   be a unique value).
@@ -167,15 +170,6 @@ type Unique a = a
 
 -- | FIXME: doc
 class IsMatrix (p :: Packing) where
-  -- | Create a new 'Matrix' filled with zeroes
-  --   (as defined by the 'Elem' instance).
-  zero
-    :: (Eigen.Elem a b)
-    => MatrixShape
-    -- ^ FIXME: doc
-    -> Unique (Matrix p a b)
-    -- ^ FIXME: doc
-
   -- | Convert a 'Matrix' to a 'MutableMatrix' with the same packing.
   thaw
     :: (PrimMonad m, Eigen.Elem a b)
@@ -196,6 +190,39 @@ class IsMatrix (p :: Packing) where
     -- ^ An immutable matrix to thaw.
     -> m (Unique (MutableMatrix p a b (PrimState m)))
     -- ^ A 'PrimMonad' action returning the thawed (mutable) matrix.
+
+  -- | Create a new 'Matrix' filled with zeroes
+  --   (as defined by the 'Elem' instance).
+  --
+  --   Laws:
+  --
+  --   1. For any @m ∷ 'Matrix' p a b@, if @(r, c) ≡ 'shape' m@,
+  --      then @m ≡ 'add' ('zero' ('shape' m)) m@.
+  --   2. For any @m ∷ 'Matrix' p a b@, if @(r, c) ≡ 'shape' m@ and @n ∷ Int@
+  --      such that @n > 1@,
+  --      then @'zero' (n, c) ≡ 'mul' ('zero' (n, r)) m@
+  --      and  @'zero' (r, n) ≡ 'mul' m ('zero' (c, n))@.
+  zero
+    :: (Eigen.Elem a b)
+    => MatrixShape
+    -- ^ FIXME: doc
+    -> Unique (Matrix p a b)
+    -- ^ FIXME: doc
+
+  -- | Create a new Kronecker delta / identity 'Matrix'.
+  --
+  --   Laws:
+  --
+  --   1. For any @m ∷ 'Matrix' p a b@, if @(r, c) ≡ 'shape' m@,
+  --      then @m ≡ 'mul' ('kronecker' (r, r)) m@
+  --      and  @m ≡ 'mul' m ('kronecker' (c, c))@.
+  kronecker
+    :: (Eigen.Elem a b)
+    => MatrixShape
+    -- ^ The shape of the identity matrix.
+    -> Unique (Matrix p a b)
+    -- ^ A matrix with the given shape the entries of which are all zeros
+    --   except for the diagonal entries.
 
   -- | Get the shape of the given matrix.
   shape
@@ -301,6 +328,130 @@ class IsMatrix (p :: Packing) where
     -> Unique (Matrix p a b)
     -- ^ The adjoint of that matrix.
 
+  -- | FIXME: doc
+  block
+    :: (Eigen.Elem a b)
+    => MatrixPos
+    -- ^ FIXME: doc
+    -> MatrixShape
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+    -> Matrix p a b
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  sum
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -> a
+
+  -- | FIXME: doc
+  prod
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -> a
+
+  -- | FIXME: doc
+  mean
+    :: (Eigen.Elem a b, Fractional a)
+    => Matrix p a b
+    -> a
+
+  -- | FIXME: doc
+  minCoeff
+    :: (Eigen.Elem a b, Ord a)
+    => Matrix p a b
+    -> a
+
+  -- | FIXME: doc
+  maxCoeff
+    :: (Eigen.Elem a b, Ord a)
+    => Matrix p a b
+    -> a
+
+  -- | The trace of a matrix is the sum of the diagonal coefficients.
+  --
+  --   Laws:
+  --
+  --   1. FIXME: add laws
+  trace
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix or vector.
+    -> a
+    -- ^ The sum of the diagonal entries.
+
+  -- | For vectors, the L₂ norm, and for matrices, the Frobenius norm.
+  --   In both cases, it is just the square root of the sum of the squares of
+  --   all the matrix entries. For vectors, this happens to be equal to the
+  --   square root of the dot product of the vector with itself.
+  --
+  --   Laws:
+  --
+  --   1. FIXME: add laws
+  norm
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix or vector.
+    -> a
+    -- ^ The square root of the sum of the squares of all the entries.
+
+  -- | For vectors, the squared L₂ norm, and for matrices the Frobenius norm.
+  --   In both cases, it is just the sum of the squares of all the matrix
+  --   entries. For vectors, this happens to be equal to the dot product of
+  --   the vector with itself.
+  --
+  --   Laws:
+  --
+  --   1. FIXME: add laws
+  squaredNorm
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix or vector.
+    -> a
+    -- ^ The sum of the squares of all the entries.
+
+  -- | The L₂ norm of a matrix using Blue's algorithm.
+  --
+  --   See /A Portable Fortran Program to Find the Euclidean Norm of a Vector/
+  --   in ACM TOMS, Vol 4, Issue 1, 1978.
+  blueNorm
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix or vector.
+    -> a
+    -- ^ The L₂ norm of the matrix or vector, computed with Blue's algorithm.
+
+  -- | FIXME: doc
+  determinant
+    :: (Eigen.Elem a b)
+    => Matrix p a b
+    -- ^ A matrix or vector.
+    -> a
+    -- ^ The determinant of the matrix.
+
+  -- | FIXME: doc
+  all
+    :: (Eigen.Elem a b)
+    => (a -> Bool)
+    -> Matrix p a b
+    -> Bool
+
+  -- | FIXME: doc
+  any
+    :: (Eigen.Elem a b)
+    => (a -> Bool)
+    -> Matrix p a b
+    -> Bool
+
+  -- | FIXME: doc
+  count
+    :: (Eigen.Elem a b)
+    => (a -> Bool)
+    -> Matrix p a b
+    -> Int
+
   -- | Encode an immutable matrix as a lazy bytestring.
   --
   --   Laws:
@@ -331,9 +482,10 @@ class IsMatrix (p :: Packing) where
 
 -- | FIXME: doc
 instance IsMatrix 'Dense where
-  zero         = uncurry Eigen.Matrix.zero
   thaw         = Eigen.Matrix.thaw
   unsafeThaw   = Eigen.Matrix.unsafeThaw
+  zero         = uncurry Eigen.Matrix.zero
+  kronecker    = uncurry Eigen.Matrix.identity
   shape        = Eigen.Matrix.dims
   imap         = (\f -> Eigen.Matrix.imap (curry f))
   imapNonZeros = (\f -> Eigen.Matrix.imap (\r c x -> if x == 0
@@ -345,6 +497,20 @@ instance IsMatrix 'Dense where
   scale        = (\s -> Eigen.Matrix.map (* s))
   transpose    = Eigen.Matrix.transpose
   adjoint      = Eigen.Matrix.adjoint
+  block        = (\(sr, sc) (br, bc) -> Eigen.Matrix.block sr sc br bc)
+  sum          = Eigen.Matrix.sum
+  prod         = Eigen.Matrix.prod
+  mean         = Eigen.Matrix.mean
+  minCoeff     = Eigen.Matrix.minCoeff
+  maxCoeff     = Eigen.Matrix.maxCoeff
+  trace        = Eigen.Matrix.trace
+  norm         = Eigen.Matrix.norm
+  squaredNorm  = Eigen.Matrix.squaredNorm
+  blueNorm     = Eigen.Matrix.blueNorm
+  determinant  = Eigen.Matrix.determinant
+  all          = Eigen.Matrix.all
+  any          = Eigen.Matrix.any
+  count        = Eigen.Matrix.count
   encode       = Eigen.Matrix.encode
   decode       = Eigen.Matrix.decode
   coeff        = uncurry Eigen.Matrix.coeff
@@ -352,7 +518,6 @@ instance IsMatrix 'Dense where
 
 -- | FIXME: doc
 instance IsMatrix 'Sparse where
-  zero (x, y) = Eigen.SparseMatrix.fromList x y []
   thaw matrix = do
     -- FIXME: verify that this is safe
     m <- unsafeIOToPrim (Eigen.SparseMatrix.thaw matrix)
@@ -361,6 +526,9 @@ instance IsMatrix 'Sparse where
     -- FIXME: verify that this is safe
     m <- unsafeIOToPrim (Eigen.SparseMatrix.unsafeThaw matrix)
     pure (MSparseMatrix m)
+  zero         = (\(x, y) -> Eigen.SparseMatrix.fromList x y [])
+  kronecker    = kronecker @'Dense .> Eigen.SparseMatrix.fromMatrix
+                 -- FIXME: this could potentially be faster
   shape        = Eigen.SparseMatrix.rows &&& Eigen.SparseMatrix.cols
   imap         = (\f -> convert .> imap @'Dense f .> convert)
   imapNonZeros = (\f m -> Eigen.SparseMatrix.uncompress m
@@ -375,6 +543,46 @@ instance IsMatrix 'Sparse where
   scale        = Eigen.SparseMatrix.scale
   transpose    = Eigen.SparseMatrix.transpose
   adjoint      = Eigen.SparseMatrix.adjoint
+  block        = (\(sr, sc) (br, bc) -> Eigen.SparseMatrix.block sr sc br bc)
+  sum          = Eigen.SparseMatrix.toList
+                 .> map (\(_, _, x) -> x)
+                 .> Prelude.sum
+  prod         = (\m -> if hasZeros m
+                        then 0
+                        else Eigen.SparseMatrix.toList m
+                             |> map (\(_, _, x) -> x)
+                             |> Prelude.product)
+  mean         = (\m -> let (r, c) = shape m
+                            scaled = scale (1 / fromIntegral r) m
+                        in EqSat.Internal.Matrix.sum scaled / fromIntegral c)
+                 -- FIXME: numerical stability / speed questionable
+  minCoeff     = Eigen.SparseMatrix.toList
+                 .> map (\(_, _, x) -> x)
+                 .> (0 :)
+                 .> minimum
+  maxCoeff     = Eigen.SparseMatrix.toList
+                 .> map (\(_, _, x) -> x)
+                 .> (0 :)
+                 .> maximum
+  trace        = (\m -> [0 .. uncurry min (shape m) - 1]
+                        |> map (\i -> coeff (i, i) m)
+                        |> Prelude.sum)
+                 -- FIXME: this could potentially be faster
+  norm         = Eigen.SparseMatrix.norm
+  squaredNorm  = Eigen.SparseMatrix.squaredNorm
+  blueNorm     = Eigen.SparseMatrix.blueNorm
+  determinant  = convert .> determinant @'Dense
+                 -- FIXME: this could potentially be faster
+  all          = (\f m -> Eigen.SparseMatrix.toList m
+                          |> Prelude.all (\(_, _, x) -> f x)
+                          |> (\b -> if hasZeros m then f 0 && b else b))
+  any          = (\f m -> Eigen.SparseMatrix.toList m
+                          |> Prelude.any (\(_, _, x) -> f x)
+                          |> (\b -> if hasZeros m then f 0 || b else b))
+  count        = (\f m -> Eigen.SparseMatrix.toList m
+                          |> map (\(_, _, x) -> fromEnum (f x))
+                          |> Prelude.sum
+                          |> (+ if hasZeros m then fromEnum (f 0) else 0))
   encode       = Eigen.SparseMatrix.encode
   decode       = Eigen.SparseMatrix.decode
   coeff        = uncurry Eigen.SparseMatrix.coeff
@@ -624,6 +832,61 @@ instance ConvertMatrix 'Sparse 'Dense where
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
+constant
+  :: (Eigen.Elem a b)
+  => MatrixShape
+  -- ^ FIXME: doc
+  -> a
+  -- ^ FIXME: doc
+  -> Matrix 'Dense a b
+  -- ^ FIXME: doc
+constant = uncurry Eigen.Matrix.constant
+
+-- | FIXME: doc
+constantMutable
+  :: (Eigen.Elem a b, PrimMonad m)
+  => MatrixShape
+  -- ^ FIXME: doc
+  -> a
+  -- ^ FIXME: doc
+  -> m (MutableMatrix 'Dense a b (PrimState m))
+  -- ^ FIXME: doc
+constantMutable sh = constant sh .> unsafeThaw
+
+-- | FIXME: doc
+ones
+  :: (Eigen.Elem a b)
+  => MatrixShape
+  -- ^ FIXME: doc
+  -> Matrix 'Dense a b
+  -- ^ FIXME: doc
+ones sh = constant sh 1
+
+-- | FIXME: doc
+onesMutable
+  :: (Eigen.Elem a b, PrimMonad m)
+  => MatrixShape
+  -- ^ FIXME: doc
+  -> m (MutableMatrix 'Dense a b (PrimState m))
+  -- ^ FIXME: doc
+onesMutable sh = constantMutable sh 1
+
+--------------------------------------------------------------------------------
+
+-- | Suppresses all nonzeros in the given matrix that are much smaller than the
+--   given tolerence value @ε@.
+sparsePrune
+  :: (Eigen.Elem a b)
+  => a
+  -- ^ The tolerance value @ε@.
+  -> Matrix 'Sparse a b
+  -- ^ A sparse matrix.
+  -> Matrix 'Sparse a b
+  -- ^ The given sparse matrix, with all nonzero elements smaller than @ε@
+  --   removed (i.e.: set to zero.)
+sparsePrune = Eigen.SparseMatrix.pruned
+
 -- | Checks whether the given immutable sparse matrix is in compressed mode.
 sparseIsCompressed
   :: (Eigen.Elem a b)
@@ -665,9 +928,10 @@ sparseMutableIsCompressed
   -> m Bool
   -- ^ A 'PrimMonad' action returning 'True' if the given matrix was in
   --   compressed mode and 'False' otherwise.
-sparseMutableIsCompressed matrix = do
-  let (MSparseMatrix m) = matrix
-  unsafeIOToPrim (Eigen.IOSparseMatrix.compressed m)
+sparseMutableIsCompressed
+  = coerce
+    .> Eigen.IOSparseMatrix.compressed
+    .> unsafeIOToPrim
 
 -- | Convert the given mutable sparse matrix to compressed mode.
 sparseMutableCompress
@@ -678,9 +942,10 @@ sparseMutableCompress
   --   FIXME: is it true that matrices in compressed mode are tolerated?
   -> m ()
   -- ^ A 'PrimMonad' action that converts the matrix to compressed mode.
-sparseMutableCompress matrix = do
-  let (MSparseMatrix m) = matrix
-  unsafeIOToPrim (Eigen.IOSparseMatrix.compress m)
+sparseMutableCompress
+  = coerce
+    .> Eigen.IOSparseMatrix.compress
+    .> unsafeIOToPrim
 
 -- | Convert the given mutable sparse matrix to uncompressed mode.
 sparseMutableUncompress
@@ -691,9 +956,10 @@ sparseMutableUncompress
   --   FIXME: is it true that matrices not in compressed mode are tolerated?
   -> m ()
   -- ^ A 'PrimMonad' action that converts the matrix to uncompressed mode.
-sparseMutableUncompress matrix = do
-  let (MSparseMatrix m) = matrix
-  unsafeIOToPrim (Eigen.IOSparseMatrix.uncompress m)
+sparseMutableUncompress
+  = coerce
+    .> Eigen.IOSparseMatrix.uncompress
+    .> unsafeIOToPrim
 
 --------------------------------------------------------------------------------
 
@@ -730,8 +996,8 @@ isPositiveDefinite matrix = either id id <$> do
     -- since these are the eigenvalues.
     () <- do
       let list = Eigen.SparseMatrix.toList frozen
-      when (all (\(r, c, _) -> r == c) list) $ do
-        earlyReturn (all (\(_, _, v) -> v > 0) list)
+      when (Prelude.all (\(r, c, _) -> r == c) list) $ do
+        earlyReturn (Prelude.all (\(_, _, v) -> v > 0) list)
 
     () <- do
       -- Compute the Gershgorin circles.
@@ -740,7 +1006,7 @@ isPositiveDefinite matrix = either id id <$> do
           c <- unsafeGetMutable matrix (i, i)
           r <- [ abs <$> unsafeGetMutable matrix (i, j)
                | j <- [0 .. numCols - 1]
-               ] |> sequenceA |> fmap (sum .> (\x -> x - c))
+               ] |> sequenceA |> fmap (Prelude.sum .> (\x -> x - c))
           pure (c, r)
 
         -- If one of the circles contains only negative values, then there is
@@ -752,7 +1018,7 @@ isPositiveDefinite matrix = either id id <$> do
 
       -- If none of the circles contain negative values, then all the
       -- eigenvalues must be positive, so the matrix is positive definite.
-      when (all (\(c, r) -> (c - r) > 0) pairs) $ earlyReturn True
+      when (Prelude.all (\(c, r) -> (c - r) > 0) pairs) $ earlyReturn True
 
     undefined
 
@@ -769,27 +1035,13 @@ isPositiveDefinite matrix = either id id <$> do
 -- Eigen.Matrix.null
 -- Eigen.Matrix.square
 -- Eigen.Matrix.ones
--- Eigen.Matrix.identity
--- Eigen.Matrix.constant
 -- Eigen.Matrix.random
--- Eigen.Matrix.coeff
--- Eigen.Matrix.unsafeCoeff
 -- Eigen.Matrix.col
 -- Eigen.Matrix.row
--- Eigen.Matrix.block
 -- Eigen.Matrix.topRows
 -- Eigen.Matrix.bottomRows
 -- Eigen.Matrix.leftCols
 -- Eigen.Matrix.rightCols
--- Eigen.Matrix.sum
--- Eigen.Matrix.prod
--- Eigen.Matrix.mean
--- Eigen.Matrix.minCoeff
--- Eigen.Matrix.maxCoeff
--- Eigen.Matrix.trace
--- Eigen.Matrix.norm
--- Eigen.Matrix.squaredNorm
--- Eigen.Matrix.blueNorm
 -- Eigen.Matrix.hypotNorm
 -- Eigen.Matrix.determinant
 -- Eigen.Matrix.fold
@@ -798,17 +1050,10 @@ isPositiveDefinite matrix = either id id <$> do
 -- Eigen.Matrix.ifold'
 -- Eigen.Matrix.fold1
 -- Eigen.Matrix.fold1'
--- Eigen.Matrix.all
--- Eigen.Matrix.any
--- Eigen.Matrix.count
--- Eigen.Matrix.map
--- Eigen.Matrix.imap
 -- Eigen.Matrix.filter
 -- Eigen.Matrix.ifilter
 -- Eigen.Matrix.diagonal
--- Eigen.Matrix.transpose
 -- Eigen.Matrix.inverse
--- Eigen.Matrix.adjoint
 -- Eigen.Matrix.conjugate
 -- Eigen.Matrix.normalize
 -- Eigen.Matrix.modify
@@ -829,17 +1074,10 @@ isPositiveDefinite matrix = either id id <$> do
 -- Eigen.SparseMatrix.toVector
 -- Eigen.SparseMatrix.fromDenseList
 -- Eigen.SparseMatrix.toDenseList
--- Eigen.SparseMatrix.norm
--- Eigen.SparseMatrix.squaredNorm
--- Eigen.SparseMatrix.blueNorm
--- Eigen.SparseMatrix.block
 -- Eigen.SparseMatrix.nonZeros
 -- Eigen.SparseMatrix.innerSize
 -- Eigen.SparseMatrix.outerSize
--- Eigen.SparseMatrix.pruned
 -- Eigen.SparseMatrix.scale
--- Eigen.SparseMatrix.transpose
--- Eigen.SparseMatrix.adjoint
 
 -- Eigen.MMatrix.replicate
 -- FIXME: more
@@ -881,5 +1119,19 @@ isPositiveDefinite matrix = either id id <$> do
 -- Eigen.SparseLA.absDeterminant
 -- Eigen.SparseLA.signDeterminant
 -- Eigen.SparseLA.logAbsDeterminant
+
+--------------------------------------------------------------------------------
+
+-- Private helper functions
+
+hasZeros
+  :: (Eigen.Elem a b)
+  => Matrix 'Sparse a b
+  -> Bool
+hasZeros m = let (r, c) = shape m
+                 numZeros = r * c - Eigen.SparseMatrix.nonZeros m
+             in if | (numZeros > 0) -> True
+                   | (numZeros < 0) -> error "hasZeros: assertion"
+                   | otherwise      -> False
 
 --------------------------------------------------------------------------------
