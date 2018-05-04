@@ -45,6 +45,7 @@
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 module EqSat.Internal.Refined
   ( -- * 'Refined'
     Refined
@@ -97,6 +98,7 @@ module EqSat.Internal.Refined
     , RefineOrException
     , RefineOtherException
     )
+  , displayRefineException
 
     -- ** 'RefineT' and 'RefineM'
   , RefineT, runRefineT
@@ -447,36 +449,41 @@ rightOr = coerce
 data RefineException
   = -- | A 'RefineException' for failures involving the 'Not' predicate.
     RefineNotException
-    !TypeRep
-    -- ^ The 'TypeRep' of the @'Not' p@ type.
+    { _RefineException_typeRep  :: !TypeRep
+      -- ^ The 'TypeRep' of the @'Not' p@ type.
+    }
 
   | -- | A 'RefineException' for failures involving the 'And' predicate.
     RefineAndException
-    !TypeRep
-    -- ^ The 'TypeRep' of the @'And' l r@ type.
-    !(Either RefineException RefineException)
-    -- ^ An 'Either' encoding which branch of the 'And' failed:
-    --   if the 'RefineException' came from the @l@ predicate, then this will
-    --   be 'Left', and if it came from the @r@ predicate, this will be 'Right'.
+    { _RefineException_typeRep  :: !TypeRep
+      -- ^ The 'TypeRep' of the @'And' l r@ type.
+    , _RefineException_andChild :: !(Either RefineException RefineException)
+      -- ^ An 'Either' encoding which branch of the 'And' failed:
+      --   if the 'RefineException' came from the @l@ predicate, then
+      --   this will be 'Left', and if it came from the @r@ predicate,
+      --   this will be 'Right'.
+    }
 
   | -- | A 'RefineException' for failures involving the 'Or' predicate.
     RefineOrException
-    !TypeRep
-    -- ^ The 'TypeRep' of the @'Or' l r@ type.
-    !RefineException
-    -- ^ The 'RefineException' for the @l@ failure.
-    !RefineException
-    -- ^ The 'RefineException' for the @r@ failure.
+    { _RefineException_typeRep  :: !TypeRep
+      -- ^ The 'TypeRep' of the @'Or' l r@ type.
+    , _RefineException_orLChild :: !RefineException
+      -- ^ The 'RefineException' for the @l@ failure.
+    , _RefineException_orRChild :: !RefineException
+      -- ^ The 'RefineException' for the @l@ failure.
+    }
 
   | -- | A 'RefineException' for failures involving all other predicates.
     RefineOtherException
-    !TypeRep
-    -- ^ The 'TypeRep' of the predicate that failed.
-    !(PP.Doc Void)
-    -- ^ A custom message to display.
-    --
-    --   FIXME: once 'displayRefineException' is improved, remember to write
-    --   some tips on how best to format messages that go here.
+    { _RefineException_typeRep :: !TypeRep
+      -- ^ The 'TypeRep' of the predicate that failed.
+    , _RefineException_message :: !(PP.Doc Void)
+      -- ^ A custom message to display.
+      --
+      --   FIXME: once 'displayRefineException' is improved, remember to write
+      --   some tips on how best to format messages that go here.
+    }
   deriving (Show, Generic)
 
 -- | Display a 'RefineException' as a @'PP.Doc' ann@

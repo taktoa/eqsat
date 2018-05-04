@@ -181,9 +181,9 @@ class IsMatrix (p :: Packing) where
   -- | Like 'thawMatrix', except the 'Matrix' given to this function can no
   --   longer be used, and the performance may be better.
   --
-  --   If Haskell had uniqueness types, this function would be safe, as the
-  --   function could take a unique 'Matrix', guaranteeing that there are no
-  --   copies lingering around to break referential transparency.
+  --   If Haskell had uniqueness types (or linear types), this function would
+  --   be safe, as the function could take a unique 'Matrix', guaranteeing that
+  --   there are no copies lingering around to break referential transparency.
   unsafeThaw
     :: (PrimMonad m, Eigen.Elem a b)
     => Unique (Matrix p a b)

@@ -97,13 +97,13 @@ import           Flow                        ((|>))
 data MStack vec s a
   = UnsafeMkMStack
     { _MStack_length
-      :: {-# UNPACK #-} !(GHC.Prim.MutVar# s Int)
+      :: !(GHC.Prim.MutVar# s Int)
       -- ^ A 'GHC.Prim.MutVar#' containing the length of the stack.
     , _MStack_capacity
-      :: {-# UNPACK #-} !(GHC.Prim.MutVar# s Int)
+      :: !(GHC.Prim.MutVar# s Int)
       -- ^ A 'GHC.Prim.MutVar#' containing the size of the underlying vector.
     , _MStack_vector
-      :: {-# UNPACK #-} !(GHC.Prim.MutVar# s (GV.Mutable vec s a))
+      :: !(GHC.Prim.MutVar# s (GV.Mutable vec s a))
       -- ^ We use a 'GHC.Prim.MutVar#' over the mutable vector so that we can
       --   allow shrinking.
     }
