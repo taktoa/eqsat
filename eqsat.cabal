@@ -93,7 +93,10 @@ library
                         , EqSat.Domain
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
-                        , EqSat.DiscriminationNet
+                        , EqSat.TermIndex
+                        , EqSat.TermIndex.Class
+                        , EqSat.TermIndex.DiscriminationNet
+                        , EqSat.TermIndex.SubstitutionTree
                         , EqSat.Errors.CheckEquationError
                         , EqSat.Internal.Compact
                         , EqSat.Internal.MStack

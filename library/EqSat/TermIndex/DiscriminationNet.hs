@@ -10,11 +10,12 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UnboxedTuples          #-}
 
 --------------------------------------------------------------------------------
 
-module EqSat.DiscriminationNet
-  ( module EqSat.DiscriminationNet -- FIXME: specific export list
+module EqSat.TermIndex.DiscriminationNet
+  ( module EqSat.TermIndex.DiscriminationNet -- FIXME: specific export list
   ) where
 
 --------------------------------------------------------------------------------
@@ -43,12 +44,19 @@ import           Data.Vector                 (Vector)
 import qualified Data.Vector.Generic         as GV
 import qualified Data.Vector.Generic.Mutable as GMV
 import           Data.Vector.Mutable         (MVector)
+import qualified Data.Vector.Unboxed         as UVector
+import qualified Data.Vector.Unboxed.Mutable as UMVector
 
 import           Data.Primitive.MutVar       (MutVar)
 import qualified Data.Primitive.MutVar       as MutVar
 
+import           Data.Primitive.ByteArray    (ByteArray, MutableByteArray)
+import qualified Data.Primitive.ByteArray    as ByteArray
+import qualified Data.Primitive.ByteArray    as MutableByteArray
+
 import           Flow
 
+import           GHC.Prim                    (Int#)
 import qualified GHC.Prim
 import qualified GHC.Types
 
@@ -67,6 +75,10 @@ import qualified EqSat.Internal.MStack       as MStack
 
 import           EqSat.Internal.Refined      (NonNegative, Refined)
 import qualified EqSat.Internal.Refined      as Refined
+
+--------------------------------------------------------------------------------
+
+data DiscriminationNet -- FIXME: remove this placeholder
 
 --------------------------------------------------------------------------------
 
@@ -298,35 +310,34 @@ class Trie (t :: * -> * -> *) where
 
 --------------------------------------------------------------------------------
 
--- class PatternIndex index where
---   addRule
---     :: (PrimMonad m, Ord node, Hashable node, Ord var, Hashable var)
---     => Equation node var
---     -- ^ FIXME: doc
---     -> index (PrimState m) node var
---     -- ^ FIXME: doc
---     -> m ()
---     -- ^ FIXME: doc
---   queryRule
---     :: TreeLike m tree
---     => tree
+data Children
+  = MkChildren
+    {-# UNPACK #-} !(# Int# , Int# , Int# , Int# #)
+  deriving ()
 
 data MDiscriminationNet s node var
-  = MkDNNode
-    !(MutVar s node)
-    !(MVector s (MDiscriminationNet s node var))
-  | MkDNDisj
-    !(MVector s (MDiscriminationNet s node var))
-  | MkDNEmit
-    !(MHashSet s (Equation node var))
+  = MkMDiscriminationNet
+    { _MDiscriminationNet_structure :: {-# UNPACK #-} !(MutableByteArray s)
+    , _MDiscriminationNet_nodes     ::                !(MVector s node)
+    , _MDiscriminationNet_variables ::                !(MVector s var)
+    }
+    -- !(MVector s (MDiscriminationNet s node var))
   deriving ()
+
+indexOfChildFast
+  :: (PrimMonad m)
+  => MDiscriminationNet (PrimState m) node var
+  -> Int#
+  -> Int#
+  -> m Int
+indexOfChildFast = undefined
 
 -- | FIXME: doc
 new
   :: (PrimMonad m)
   => m (MDiscriminationNet (PrimState m) node var)
   -- ^ FIXME: doc
-new = MkDNDisj <$> GMV.new 0
+new = undefined -- MkDNDisj <$> GMV.new 0
 
 -- Level-order traversal to get ([Either node var], rhs)
 -- Smoosh all those lists together to get a tree.
