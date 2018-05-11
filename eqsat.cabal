@@ -104,7 +104,7 @@ library
                         , EqSat.Internal.MHashMap
                         , EqSat.Internal.MBitmap
                         , EqSat.Internal.MGraph
-                        , EqSat.Internal.GraphMatching
+                        , EqSat.Internal.BipartiteMatching
                         , EqSat.Internal.Matrix
                         , EqSat.Internal.PrettyPrinter
                         , EqSat.Internal.Refined

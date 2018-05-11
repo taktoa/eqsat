@@ -881,15 +881,23 @@ saturate eqs heuristic initial timer callback = do
           Nothing    -> pure soFar
   go initial []
 
+-- | FIXME: doc
+type LabelledTransitionSystem node var label
+  = Map (Equation node var) label
+
+-- | FIXME: doc
+type TransitionSystem node var
+  = LabelledTransitionSystem node var ()
+
 -- | The public interface of equality saturation.
 equalitySaturation
-  :: forall node heuristic expr m a.
+  :: forall label node heuristic expr m a.
      ( IsExpression node expr
      , MonadIO m
      , MonadError SomeException m
      , Heuristic heuristic
      )
-  => Set (Equation node Variable)
+  => LabelledTransitionSystem node Variable label
   -- ^ A set of optimization axioms.
   -> heuristic node
   -- ^ The performance heuristic to optimize.
@@ -910,8 +918,9 @@ equalitySaturation
   -> m [a]
   -- ^ The list of results produced by the second callback, in _reverse_
   --   chronological order (e.g.: starting with newest and ending with oldest).
-equalitySaturation eqs heuristic initial timer cb
-  = let exprToEPEG = exprToGTerm .> makePEG' .> pegToEPEG
+equalitySaturation lts heuristic initial timer cb
+  = let eqs = Map.keysSet lts
+        exprToEPEG = exprToGTerm .> makePEG' .> pegToEPEG
         pegToExpr (MkSomePEG peg) = case gtermToExpr (pegToTerm peg) of
                                       Left  exception -> throwError exception
                                       Right result    -> pure result

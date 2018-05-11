@@ -12,8 +12,8 @@
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-module EqSat.Internal.GraphMatching
-  ( module EqSat.Internal.GraphMatching -- FIXME: explicit export list
+module EqSat.Internal.BipartiteMatching
+  ( module EqSat.Internal.BipartiteMatching -- FIXME: explicit export list
   ) where
 
 --------------------------------------------------------------------------------
