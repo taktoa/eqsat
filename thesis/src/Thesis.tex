@@ -7,29 +7,26 @@
 %\usepackage{eucal}        % Euler (calligraphic/script)
 \usepackage{bm}            % Bold math font
 \usepackage[at]{easylist}  % Easy-to-use lists
+\usepackage{enumitem}      % Customize `enumerate' lists
 \usepackage{amsmath}       % The AMS math package
 \usepackage{amssymb}       % The AMS symbols package
 \usepackage{mathtools}     % Extensions to `amsmath'
 \usepackage{wasysym}       % Various symbols, including smiley faces
 \usepackage{stmaryrd}      % Logic and CS symbols
 \usepackage{xfrac}         % Split level fractions with \sfrac
-\usepackage{todonotes}     % TODO notes
-\usepackage{enumitem}      % Customize `enumerate' lists
 \usepackage{bussproofs}    % Gentzen-style inference rules
-\usepackage{fontspec}      % FIXME
+\usepackage{fontspec}      % Fonts
 \usepackage{listings}      % Code listings
-\usepackage{geometry}
-\usepackage{hyperref}
-\usepackage{cite}
-\usepackage[numbib]{tocbibind}
-\usepackage{titlesec}
-\usepackage{blindtext}
-\usepackage{color}
-\usepackage{geometry}
+\usepackage{color}         % Color
+\usepackage{xcolor}        % Color
+
+\usepackage[chapter]{tocbibind}
+
 
 % ------------------------------------------------------------------------------
 % Chapter titles
 
+\usepackage{titlesec}
 \definecolor{gray75}{gray}{0.75}
 \titleformat{\chapter}[hang]{\Huge\bfseries}{%
   \thechapter\hspace{20pt}\textcolor{gray75}{|}\hspace{20pt}%
@@ -39,26 +36,39 @@
 % ------------------------------------------------------------------------------
 % Code blocks
 
-\usepackage[outputdir=../out]{minted}
+\usepackage[outputdir=../out,chapter]{minted}
+
+\usemintedstyle[haskell]{trac}
 
 \setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
+
+\renewcommand{\listoflistings}{%
+  \cleardoublepage
+  \addcontentsline{toc}{chapter}{\listoflistingscaption}%
+  \listof{listing}{\listoflistingscaption}%
+}
 
 % ------------------------------------------------------------------------------
 % Hyperlinks
 
-\definecolor{gray75}{gray}{0.75}
-
+\usepackage{hyperref}
+\definecolor{linkblue}{HTML}{0071E6}
 \hypersetup{
   colorlinks  = true,
-  linkcolor   = blue,
-  urlcolor    = blue,
-  citecolor   = blue,
-  anchorcolor = blue,
+  linkcolor   = linkblue,
+  urlcolor    = linkblue,
+  citecolor   = linkblue,
+  anchorcolor = linkblue,
 }
+
+\renewcommand{\sectionautorefname}{\S}
+\renewcommand{\subsectionautorefname}{\S}
+\renewcommand{\subsubsectionautorefname}{\S}
 
 % ------------------------------------------------------------------------------
 % Page geometry
 
+\usepackage{geometry}
 \geometry{
   hmargin        = 1.250in,
   vmargin        = 1.000in,
@@ -71,7 +81,10 @@
 % TikZ
 
 \usepackage{tikz}
-\usetikzlibrary{arrows,shapes,snakes,automata,backgrounds,petri,positioning}
+\usepackage[fancy]{tikz-inet}
+\usetikzlibrary{%
+  arrows,shapes,automata,backgrounds,petri,positioning%
+}
 
 % ------------------------------------------------------------------------------
 % Short names for fonts
@@ -132,6 +145,8 @@
 % ------------------------------------------------------------------------------
 % TODO notes
 
+\usepackage{todonotes}
+
 \newlength{\fixmewidth}
 \setlength{\fixmewidth}{0.7\textwidth}
 \newcommand{\fixme}[1]{%
@@ -142,6 +157,46 @@
   \begin{minipage}[c]{3.5em}%
   \todo[color=green!40,inline]{\textsc{fixme}}%
   \end{minipage}}
+
+% ------------------------------------------------------------------------------
+% Bibliography and citation style
+
+\usepackage{biblatex}
+
+\newbibmacro*{bbx:parunit}{%
+  \ifbibliography{%
+    \setunit{\bibpagerefpunct}{\newblock{}}%
+    \usebibmacro{pageref}%
+    \clearlist{pageref}%
+    \setunit{\adddot\par\nobreak}}{}%
+}
+
+\renewbibmacro*{doi+eprint+url}{%
+  \usebibmacro{bbx:parunit}%
+  \iftoggle{bbx:doi}{\printfield{doi}}{}%
+  \iftoggle{bbx:eprint}{\usebibmacro{eprint}}{}%
+  \iftoggle{bbx:url}{\usebibmacro{url+urldate}}{}%
+}
+
+\renewbibmacro*{eprint}{%
+  \usebibmacro{bbx:parunit}%
+  \iffieldundef{eprinttype}{%
+    \printfield{eprint}%
+  }{%
+    \printfield[eprint:\strfield{eprinttype}]{eprint}%
+  }%
+}
+
+\renewbibmacro*{url+urldate}{%
+  \usebibmacro{bbx:parunit}%
+  \printfield{url}%
+  \iffieldundef{urlyear}{
+  }{%
+    \setunit*{\addspace}%
+    \printtext[urldate]{\printurldate}%
+  }}
+
+\addbibresource{sources.bib}
 
 % ------------------------------------------------------------------------------
 % Miscellaneous other stuff
@@ -183,20 +238,22 @@
 
 \begin{document}
 
-\title{A Generic Implementation of Equality Saturation in Haskell}
+\title{A Generic, Anytime Equality Saturation Algorithm}
 \author{%
   Remy Goldschmidt \\
   \email{regolds2@illinois.edu} \\
   University of Illinois at Urbana-Champaign
 }
 
-\maketitle
+\maketitle{}
 
-\tableofcontents
+\tableofcontents{}
+\listoflistings{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \chapter{Introduction}
+\label{sec:introduction}
 
 Equality saturation is a framework for optimization first introduced in
 a 2009 POPL paper~\cite{tate-2009} by Tate et al.
@@ -208,14 +265,21 @@ opportunities to apply optimizations. Equality saturation solves the phase
 ordering problem by restructuring optimization as saturation-based automated
 theorem proving (``forward chaining'') followed by combinatorial optimization.
 
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Abstract equality saturation}
+\label{sec:abstract-eqsat}
+
 The basic outline of equality saturation is that the user must first convert
 a piece of code (usually a control flow graph) into a referentially transparent
 directed graph with sharing, which is called a \textit{program expression graph}
 (PEG)\footnotemark. Here, ``referentially transparent'' means that, assuming
 there is a transition system $(S, {\to})$ representing the semantics of the
 language, the semantics of a PEG node are defined purely by the node label and
-the semantics of the children of that node (its ``out-neighbors''). Once we have
-a PEG, equality saturation needs two other things from the user to optimize it:
+the semantics of the children of that node (its ``out-neighbors''). In addition
+to a PEG, equality saturation has two other inputs:
 
 \footnotetext{
   Note that the way PEGs are defined in \cite{tate-2009} is actually more
@@ -230,37 +294,202 @@ a PEG, equality saturation needs two other things from the user to optimize it:
   A term-rewriting system on PEGs, whose rules define the basic optimizations
   that the equality saturation engine will compose together. For example, this
   term-rewriting system could simply be the operational semantics TRS of the
-  programming language, in terms of PEGs.
+  programming language, in terms of PEGs (using this TRS would make the
+  optimizer quite similar to a partial evaluator).
 }
 @ {%
   A heuristic for the runtime performance of a given PEG. Since a PEG is
-  referentially transparent, this can be expressed inductively; e.g.: the
+  referentially transparent, this can be expressed inductively as a pair of
+  a function interpreting PEG node labels into a domain $R$\footnotemark{}
+  and a function combining a set of elements of $R$ into one value; i.e.: the
   type of a heuristic function of a PEG whose node label set is $L$ can be
-  $(L \to R) \times (\mbb{P}(R) \to R)$\footnotemark{} rather than
-  $\mtt{PEG}_L \to R$ without losing any expressiveness.
+  $L \times \mbb{P}(R) \to R$ rather than $\mtt{PEG}_L \to R$ without
+  losing any expressiveness. By expressing the heuristic function this way,
+  the combinatorial optimization we do later can be incremental, as performance
+  is a local property (i.e.: it is a catamorphism).
 
   \footnotetext{
-    $R$ here is an arbitrary ordered semiring; usually this will be an integer
-    or floating-point type.
+    $R$ here is typically a partially ordered semiring; usually this will be
+    an integer or floating-point type.
   }
 }
 \end{easylist}
 
+The output of equality saturation is an optimized PEG, which can then be turned
+back into a control flow graph for code generation. Since equality saturation
+involves a time-consuming breadth-first equational proof search, there is also
+an ``anytime'' variant of equality saturation where the best known PEG so far
+is emitted every so often (a user-specified \textit{timer} of type
+\texttt{IO Bool} is called every time a rule is applied, and if it returns
+\texttt{True}, the best PEG found so far is passed to a user-specified
+\textit{callback}). Since performance is expressed as a local property (a side
+effect of referential transparency), we can cache evaluations of the performance
+heuristic on parts of the code that have not changed during equality saturation,
+so the anytime variant of equality saturation is not asymptotically slower than
+the traditional variant.
 
- and a heuristic for
-the performance of a
-
-Then
-this PEG is given to the equality saturation algorithm along with a set of
-rewrite rules on the term language given by PEG nodes
-We then take
-as input from the user
-
-The equality saturation algorithm, as originally described, is comprised of the
-following steps:
+Consider the types described in Listing~\ref{lst:basic-eqsat}. This is the most
+basic abstract description of equality saturation. The intended semantics of the
+\texttt{saturate} function are the following:
 
 \begin{easylist}[enumerate]
-@ Convert the input CFG to a PEG
+@ Convert the given term to a PEG, and then to an EPEG.
+@ Apply a rule to a node.
+@ Call the ``timer'':
+@@ {%
+  If it returns \texttt{True}, select the best sub-PEG using the heuristic and
+  call the callback with this PEG (and its quality and equality proof).
+}
+@@ {%
+  Otherwise, go to step 2.
+}
+\end{easylist}
+
+\begin{listing}[ht]
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+type Variable = Natural
+
+data TermRepr = G | T
+
+data Term (repr :: TermRepr) (node :: *) (var :: *) where
+  Ref  :: Natural                      -> Term 'G   node var
+  Var  :: var                          -> Term repr node var
+  Node :: (node, [Term repr node var]) -> Term repr node var
+
+type OpenTTerm   node = Term 'T node Variable
+type OpenGTerm   node = Term 'G node Variable
+type ClosedTTerm node = Term 'T node Void
+type ClosedGTerm node = Term 'G node Void
+
+-- Any Term can be converted to a GTerm, but not vice versa.
+upcastTerm :: Term repr node var -> GTerm node var
+
+-- Invariant: variables in right term are a subset of variables in left term
+type Equation node = (TTerm node Variable, GTerm node Variable)
+
+type TRS  node       = Set (Equation node)
+type LTRS node label = Map (Equation node) label
+
+type TermCursor = [Natural]
+
+data Proof label = QED | ApplyRule TermCursor label (Proof label)
+
+type Heuristic m node real = (node -> [real] -> m real)
+
+type Timer m = m Bool
+
+type Callback m node real label
+  = ( Term node   -- The best term discovered so far
+    , real        -- The quality of this term
+    , Proof label -- A proof of equality with the original term
+    ) -> m ()
+
+saturate :: (Ord real, Monad m)
+         => LTRS node label            -- The rewrite rules to optimize with
+         -> Heuristic m node real      -- The performance heuristic
+         -> Term node                  -- The term to optimize
+         -> Timer m                    -- The "timer"
+         -> Callback m node real label -- The "callback"
+         -> m ()
+\end{minted}
+\caption{The most basic exposition of equality saturation}
+\label{lst:basic-eqsat}
+\end{listing}
+
+\chapter{Improving performance}
+\label{sec:improving-performance}
+
+\section{Sharing}
+\label{sec:sharing}
+
+The first problem with the version of equality saturation I have shown you is
+that it doesn't account for sharing in the EPEG. We can solve this via
+hash-consing, although the presence of cycles in the EPEG presents a problem for
+most hash-consing algorithms. The solution is to compute the set of
+strongly-connected components (SCCs) of the EPEG, and then hash-cons the graph
+the nodes of which are pairs of EPEG nodes and the SCCs they belong to and
+the edges of which are a spanning tree of the EPEG. Pairing the nodes with their
+SCCs ensures that the cycles are included in the hash of each node, and an EPEG
+can be recovered by reintroducing the cycles from the SCCs.
+
+\section{Cycle detection}
+\label{sec:cycle-detection}
+
+Consider any term rewriting system with a rule like $f(x, y) \mapsto f(y, x)$
+for some function symbol $f$; it is clear that such a rewrite rule will cause
+a na\"{\i}ve implementation of equality saturation to run forever on any term
+including $f$, since the rule can always be applied. For computability-theoretic
+reasons it is impossible to prevent all such loops, but in many cases we can
+prevent loops in the following way:
+
+\begin{easylist}[itemize]
+@ {%
+  If there are $n$ rules in the term rewriting system, associate a bitvector of
+  length $n$, filled with zeros, to each node in the EPEG. For a node $A$, we
+  will denote this bitvector by $v_A \in \{0, \ldots, n - 1\} \to \mbs{2}$.
+}
+@ {%
+  When we merge nodes $A$ and $B$ during hash-consing into a node $C$, it should
+  be the case that
+  $ v_C
+  = {\lor}_\msf{bitwise}(v_A, v_B)
+  = \{(i, v_A(i) \lor v_B(i)) \mid i \in \{0, \ldots, n - 1\}\}$.
+}
+@ {%
+  If the $i$th rule in the term rewriting system is applied to node $A$, first
+  check whether $v_A(i) = 1$. If so, then skip applying this rule. Otherwise,
+  set $v_A(i)$ to $1$ and apply the rule.
+}
+\end{easylist}
+
+\section{Online SCC computation}
+\label{sec:online-scc}
+
+The sharing algorithm described in \autoref{sec:sharing} requires recomputation
+of the strongly-connected component graph of the EPEG every time a node is
+added. This is inefficient, since most of the work done in each SCC computation
+will be similar before and after the addition of a node. This inefficiency can
+be prevented by using any of the online algorithms for SCC computation. As of
+this writing, the state of the art for online SCC computation is described in
+a 2015 paper by Bender et al.: \cite{bender-2015}.
+
+\chapter{RemoveMe: Outline}
+
+\begin{easylist}[enumerate]
+@ Equality saturation in increasing complexity
+@@ The abstract interface
+@@ The simplest correct implementation
+@@ Improving performance
+@@@ Sharing
+@@@ Online algorithm for strongly-connected components (\cite{bender-2015})
+@@@ Term indexing
+@@@@ Discrimination trees (\cite{handbook-ch26})
+@@@@ Substitution trees (\cite{graf-1994})
+@@@@ Context trees (\cite{ganzinger-2001})
+@@@ Caching performance heuristic executions
+@@@ Parallelization
+@@ Improving expressiveness
+@@@ Adding equational axioms
+@@@@ See page 225 of \cite{siekmann-1989}
+@@@@ ACU/ACI/BR/AG?
+@@@ Conditional rewriting (\cite{rosu-2005})
+@@ Improving correctness
+@@@ Type systems
+@@ Integration with other tools
+@@@ K Framework (\cite{rosu-2010})
+@@@ IncA / $\mathrm{IncA}_L$ (\cite{szabo-2016}, \cite{szabo-2017})
+@ Referentially transparent languages
+@@ Term-rewriting systems (Adithya Murali, Alexander Altman, Remy Goldschmidt)
+@@ Interaction nets (\cite{asperti-1998})
+@@ CCCs (\cite{elliott-2017})
+@ Future work
+@@ Incremental equality saturation
+@@@ Compute difference of old and new PEG spanning tree (\cite{lempsink-2009})
+@@@ If there are common subtrees, apply the proofs from the old EPEG to the new EPEG, and exclude the explored proof branches
+@@ Going beyond equality?
+@@ Accounting for laziness (\cite{okasaki-1998})
+@@ Dependent types (\cite{selsam-2017})
+@@ Optimizing an equality saturation optimizer with equality saturation
 \end{easylist}
 
 % \begin{easylist}[itemize]
@@ -304,8 +533,7 @@ following steps:
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\bibliography{sources}
-\bibliographystyle{plainurl}
+\printbibliography[heading=bibnumbered]{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
