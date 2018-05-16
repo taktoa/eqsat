@@ -214,6 +214,23 @@
 \addbibresource{sources.bib}
 
 % ------------------------------------------------------------------------------
+% List of definitions
+
+% \usepackage{tocloft}
+% \usepackage[english]{babel}
+%
+% \newcommand{\listdefinitionname}{List of Definitions}
+% \newlistof{definition}{def}{\listdefinitionname}
+% \newcommand{\definition}[1]{%
+%   \refstepcounter{definition}
+%   \par\noindent\textbf{Definition \thedefinition. #1}
+%   \addcontentsline{def}{definition}
+%   {\protect\numberline{\thechapter.\thedefinition}#1}\par}
+%
+% % \definition{Your first example}
+% % \definition{Your second example}
+
+% ------------------------------------------------------------------------------
 % Miscellaneous other stuff
 
 \newcommand{\eps}[0]{\varepsilon}
@@ -229,6 +246,8 @@
 
 \DeclareMathOperator{\image}{im}
 \DeclareMathOperator{\domain}{dom}
+
+\providecommand{\tightlist}{\setlength{\itemsep}{3pt}\setlength{\parskip}{0pt}}
 
 \newcommand{\aside}[1]{\hfill{} ({#1})}
 \newcommand{\forceNewLine}[0]{{\hspace{1em}\newline{}}}
@@ -266,6 +285,7 @@
 
 \tableofcontents{}
 \listoflistings{}
+%\listofdefinition{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -306,32 +326,23 @@ to a PEG, equality saturation has two other inputs:
   expositions.
 }
 
-\begin{easylist}[enumerate]
-@ {%
+\begin{enumerate}
+\item {%
   A term-rewriting system on PEGs, whose rules define the basic optimizations
   that the equality saturation engine will compose together. For example, this
   term-rewriting system could simply be the operational semantics TRS of the
   programming language, in terms of PEGs (using this TRS would make the
   optimizer quite similar to a partial evaluator).
 }
-@ {%
-  A heuristic for the runtime performance of a given PEG. Since a PEG is
-  referentially transparent, this can be expressed inductively as a pair of
-  a function interpreting PEG node labels into a domain $R$\footnotemark{}
-  and a function combining a set of elements of $R$ into one value; i.e.: the
-  type of a heuristic function of a PEG whose node label set is $L$ can be
-  $L \times \mbb{P}(R) \to R$ rather than $\mtt{PEG}_L \to R$ without
-  losing any expressiveness. By expressing the heuristic function this way,
-  the combinatorial optimization we do later can be incremental, as performance
-  is a local property (i.e.: it is a catamorphism).
-  \fixme{remove this, it's already covered in \autoref{sec:heuristic-caching}}
-
-  \footnotetext{
-    $R$ here is typically a partially ordered semiring; usually this will be
-    an integer or floating-point type.
-  }
+\item {%
+  A heuristic for the runtime performance of a given PEG.
+  In the most general case, this is simply a function of type
+  \haskell{Term -> R} for some partially ordered semiring \haskell{R},
+  which is usually an integer or floating-point type but may also be something
+  more sophisticated like the symbolic integer types in the
+  \href{https://hackage.haskell.org/package/sbv}{\texttt{sbv}} package.
 }
-\end{easylist}
+\end{enumerate}
 
 The output of equality saturation is an optimized PEG, which can then be turned
 back into a control flow graph for code generation. Since equality saturation
@@ -350,18 +361,22 @@ Consider the types described in \autoref{lst:basic-eqsat}. This is the most
 basic abstract description of equality saturation. The intended semantics of the
 \texttt{saturate} function are the following:
 
-\begin{easylist}[enumerate]
-@ Convert the given term to a PEG, and then to an EPEG.
-@ Apply a rule to a node.
-@ Call the ``timer'':
-@@ {%
-  If it returns \texttt{True}, select the best sub-PEG using the heuristic and
-  call the callback with this PEG (and its quality and equality proof).
+\begin{enumerate}
+\item Convert the given term to a PEG, and then to an EPEG.
+\item Apply a rule to a node.
+\item {%
+  Call the ``timer'':
+  \begin{enumerate}
+  \item {%
+    If it returns \texttt{True}, select the best sub-PEG using the heuristic and
+    call the callback with this PEG (and its quality and equality proof).
+  }
+  \item {%
+    Otherwise, go to step 2.
+  }
+  \end{enumerate}
 }
-@@ {%
-  Otherwise, go to step 2.
-}
-\end{easylist}
+\end{enumerate}
 
 \begin{listing}[ht]
 \begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
@@ -414,6 +429,8 @@ saturate :: (Ord real, Monad m)
 \label{lst:basic-eqsat}
 \end{listing}
 
+%The laws of the \haskell{}
+
 \fixme{explain more about eqsat}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -451,25 +468,25 @@ including $f$, since the rule can always be applied. For computability-theoretic
 reasons it is impossible to prevent all such loops, but in many cases we can
 prevent loops in the following way:
 
-\begin{easylist}[itemize]
-@ {%
+\begin{itemize}
+\item {%
   If there are $n$ rules in the term rewriting system, associate a bitvector of
   length $n$, filled with zeros, to each node in the EPEG. For a node $A$, we
   will denote this bitvector by $v_A \in \{0, \ldots, n - 1\} \to \mbs{2}$.
 }
-@ {%
+\item {%
   When we merge nodes $A$ and $B$ during hash-consing into a node $C$, it should
   be the case that
   $ v_C
   = {\lor}_\msf{bitwise}(v_A, v_B)
   = \{(i, v_A(i) \lor v_B(i)) \mid i \in \{0, \ldots, n - 1\}\}$.
 }
-@ {%
+\item {%
   If the $i$th rule in the term rewriting system is going to be applied to
   node $A$, first check whether $v_A(i) = 1$. If so, then skip applying this
   rule. Otherwise, set the value of $v_A(i)$ to $1$ and apply the rule.
 }
-\end{easylist}
+\end{itemize}
 
 Unfortunately, as the number of rules increases, this solution becomes slower
 and slower, as the bitvectors will tend to be sparse (mostly zeros). Ideally,
@@ -670,7 +687,7 @@ every path
 \texttt{[(\haskell{σ₁}, \haskell{ω₁}), …, (\haskell{σₙ}, \haskell{ωₙ})] \haskell{::} \haskell{[Sub n (Either Indicator v), [SubTree n v val]]}}
 from the root to a leaf of a non-empty tree it must be the case that the
 variables introduced by the composition $\haskell{ωₙ} \comp \ldots \comp \haskell{ω₁}$ are
-all \haskell{Left i} for some \haskell{i :: Indicator}.
+all \texttt{\haskell{Left} \haskell{i}} for some \haskell{i :: Indicator}.
 Thirdly, for every such path and every $j \in \{1, \ldots, n - 1\} \subset \mbb{N}$,
 it must be the case that, when we define $k = j + 1$,
 \texttt{\haskell{null} (\haskell{domain} \haskell{σₖ} ∩ (\haskell{domain} \haskell{σ₀} ∪ … ∪ \haskell{domain} \haskell{σⱼ})) \haskell{==} \haskell{True}}.
@@ -769,21 +786,21 @@ cases this will be much slower (due to spurious copying) than a dedicated solver
 for associative-commutative matching. There are a number of theories that can
 be integrated into the matching algorithm, including:
 
-\begin{easylist}[enumerate]
-@ Semigroups (\textsc{a})
-@ Abelian semigroups (\textsc{ac})
-@ Abelian monoids (\textsc{acu})
-@ Idempotent abelian semigroups (\textsc{aci})
-@ Boolean rings (\textsc{br})
-@ Abelian groups (\textsc{ag})
-\end{easylist}
+\begin{itemize}
+\item Semigroups (\textsc{a})
+\item Abelian semigroups (\textsc{ac})
+\item Abelian monoids (\textsc{acu})
+\item Idempotent abelian semigroups (\textsc{aci})
+\item Boolean rings (\textsc{br})
+\item Abelian groups (\textsc{ag})
+\end{itemize}
 
 For a relatively comprehensive review of the literature on equational matching
 and unification, see \cite{siekmann-1989}. Further research is needed on the
 asymptotic and in-practice complexity of these matching algorithms to determine
 which ones are relevant to a practical implementation of equality saturation,
-but given that the $\mbb{K}$ Framework implements AC-unification, it is likely
-that this at least is worth implementing.
+but given that the $\mbb{K}$ Framework implements \textsc{ac}-unification, it is
+likely that this at least is worth implementing.
 
 \section{Conditional rewriting}
 \label{sec:conditional-rewriting}
@@ -792,7 +809,10 @@ Many optimizations cannot easily be implemented using a term-rewriting system
 alone; it is often much easier to write optimizations in a \textit{conditional}
 term-rewriting system, in which rules can have boolean side conditions.
 
-\sfixme{}
+We can improve the expressiveness of our equality saturation algorithm by
+implementing conditional rewriting. One efficient way to implement this is by
+eliminating a conditional TRS into an equivalent unconditional TRS using the
+algorithm described in \cite{rosu-2005}.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -853,10 +873,21 @@ Citation: \cite{asperti-1998}
 
 \sfixme{}
 
+% Adithya Murali, Alexander Altman, Remy Goldschmidt
+
 \section{Relational algebra}
 \label{sec:relational-algebra}
 
-\sfixme{}
+Relational algebra, which is a mathematical formalization of a fragment of the
+languages (like SQL) commonly used for querying relational databases, seems like
+an ideal language to optimize with equality saturation. It has many equational
+laws and is already completely referentially transparent.
+
+The same is not true of Datalog, a non-Turing complete fragment of Prolog that
+is more expressive than relational algebra, but there may be a way to express
+Datalog queries in a referentially transparent syntax; I suspect it may look
+like augmenting relational algebra with some kind of fixed-point operator, but
+I am not sure.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -868,31 +899,87 @@ Citation: \cite{asperti-1998}
 \section{Incremental equality saturation}
 \label{sec:incremental-eqsat}
 
-\sfixme{}
+If there is an algorithm described by a function \haskell{f :: A -> B}, we say
+that \haskell{f' :: (A, ΔA) -> B} is the \textit{incrementalized} version of
+\haskell{f} if \haskell{ΔA} is a monoid and there exists a monoid action
+\haskell{patch :: ΔA -> A -> A} such that for any \haskell{x :: A} and
+\haskell{δ :: ΔA},
+\texttt{\haskell{f'} (\haskell{x}, \haskell{δ}) = \haskell{f} (\haskell{patch} \haskell{δ} \haskell{x})}.
+Ideally, if \haskell{x} is already computed and \haskell{δ} is ``small'', the
+incrementalized version \texttt{\haskell{f'} (\haskell{x}, \haskell{δ})} will
+also be faster to compute than
+\texttt{\haskell{f} (\haskell{patch} \haskell{δ} \haskell{x})},
+though this connotation is hard to formalize, especially in a
+lazy language like Haskell.
 
-\begin{easylist}[itemize]
-@ Compute difference of old and new PEG spanning tree (\cite{lempsink-2009})
-@ If there are common subtrees, apply the proofs from the old EPEG to the new EPEG, and exclude the explored proof branches
-\end{easylist}
+We can likely usefully incrementalize equality saturation in this sense, as
+referential transparency ensures that we only need to re-optimize the parts of
+the PEG that have changed.
 
-\section{Beyond equality}
-\label{sec:beyond-equality}
+This would probably look something like:
 
-\sfixme{}
+\begin{enumerate}
+\item {%
+  Compute the difference of the old and new PEGs using
+  a modified version of \cite{lempsink-2009}.
+}
+\item {%
+  If there are common subtrees, apply the proofs from the old EPEG
+  to the new EPEG.
+}
+\item {%
+  Exclude the already-explored proof tree branches in the new EPEG.
+}
+\end{enumerate}
+
+Alternatively, we may simply be able to reuse the pre-existing EPEG by adding
+the nodes of the new PEG to optimize to the EPEG, running the maximal sharing
+algorithm on it, and removing all nodes that are not in the connected component
+containing the root node of that PEG.
+
+This feature seems especially important for real-world compilers using equality
+saturation, as it could drastically reduce build times when optimization is
+enabled and small changes have been made. There are plenty of unexplored
+questions in this realm; for example, how should the EPEG be quickly and
+compactly serialized to avoid overhead due to this feature?
 
 \section{Dependent types}
 \label{sec:dependent-types}
 
-Citation: \cite{selsam-2017}
+Code written in languages with dependent type systems often ends up containing
+many theorems and equations encoded in higher-order logic at the type level.
+These equations could be useful for equality saturation, as they represent
+(often nontrivial) ways of rewriting a program. Selsam and Moura wrote a 2016
+paper \cite{selsam-2017} on congruence closure in intensional type theory that
+seems especially relevant to an implementation of equality saturation for a
+dependently-typed language.
 
-\sfixme{}
+\section{Homotopy type theory}
+\label{sec:hott}
 
-\section{Laziness}
-\label{sec:laziness}
+Homotopy type theory is a constructive foundation for mathematics based on
+intensional type theory with higher inductive types and the univalence axiom,
+which is incompatible with the \textit{uniqueness of identity proofs} axiom
+commonly assumed in dependent type theory.
 
-Citation: \cite{okasaki-1998}
+The main thing distinguishing proofs in homotopy type theory from proofs in
+dependently typed languages is the fact that there can be nontrivial equalities
+between type-level equalities. In fact, types in homotopy type theory can
+usefully be thought of as weak $\omega$-groupoids, which can have arbitrarily
+tall towers of nontrivial equality. Cubical type theory is an experimental
+computable implementation of homotopy type theory, so homotopy type theory may
+have relevance to computer applications.
 
-\sfixme{}
+It would be interesting to explore saturation-based automated theorem proving
+in the context of these weak $\omega$-groupoids, rather than the $1$-groupoids
+(equivalence relations) we've considered in this paper.
+
+% \section{Laziness}
+% \label{sec:laziness}
+%
+% Citation: \cite{okasaki-1998}
+%
+% \sfixme{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
