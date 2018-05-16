@@ -3,25 +3,34 @@
 % ------------------------------------------------------------------------------
 % Dependencies
 
-%\usepackage{cmbright}     % Computer Modern Bright
-%\usepackage{eucal}        % Euler (calligraphic/script)
-\usepackage{bm}            % Bold math font
-\usepackage[at]{easylist}  % Easy-to-use lists
-\usepackage{enumitem}      % Customize `enumerate' lists
-\usepackage{amsmath}       % The AMS math package
-\usepackage{amssymb}       % The AMS symbols package
-\usepackage{mathtools}     % Extensions to `amsmath'
-\usepackage{wasysym}       % Various symbols, including smiley faces
-\usepackage{stmaryrd}      % Logic and CS symbols
-\usepackage{xfrac}         % Split level fractions with \sfrac
-\usepackage{bussproofs}    % Gentzen-style inference rules
-\usepackage{fontspec}      % Fonts
-\usepackage{listings}      % Code listings
-\usepackage{color}         % Color
-\usepackage{xcolor}        % Color
+%\usepackage{cmbright}             % Computer Modern Bright
+%\usepackage{eucal}                % Euler (calligraphic/script)
+\usepackage{bm}                    % Bold math font
+\usepackage[at]{easylist}          % Easy-to-use lists
+\usepackage{enumitem}              % Customize `enumerate' lists
+\usepackage{amsmath}               % The AMS math package
+\usepackage{amssymb}               % The AMS symbols package
+\usepackage{mathtools}             % Extensions to `amsmath'
+\usepackage{wasysym}               % Various symbols, including smiley faces
+\usepackage{stmaryrd}              % Logic and CS symbols
+\usepackage{xfrac}                 % Split level fractions with \sfrac
+\usepackage{bussproofs}            % Gentzen-style inference rules
+\usepackage{fontspec}              % Fonts
+\usepackage{listings}              % Code listings
+\usepackage{color}                 % Color
+\usepackage{xcolor}                % Color
+\usepackage[binary-units]{siunitx} % SI units
+\usepackage{parskip}
 
 \usepackage[chapter]{tocbibind}
 
+% ------------------------------------------------------------------------------
+% Watermarks
+
+\usepackage{draftwatermark}
+\SetWatermarkText{Draft}
+\SetWatermarkScale{2}
+\SetWatermarkColor[gray]{0.95}
 
 % ------------------------------------------------------------------------------
 % Chapter titles
@@ -42,11 +51,13 @@
 
 \setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
 
-\renewcommand{\listoflistings}{%
-  \cleardoublepage
-  \addcontentsline{toc}{chapter}{\listoflistingscaption}%
-  \listof{listing}{\listoflistingscaption}%
-}
+%\renewcommand{\listoflistings}{%
+%  \cleardoublepage
+%  \addcontentsline{toc}{chapter}{\listoflistingscaption}%
+%  \listof{listing}{\listoflistingscaption}%
+%}
+
+\newcommand{\haskell}[1]{\mintinline{haskell}{#1}}
 
 % ------------------------------------------------------------------------------
 % Hyperlinks
@@ -61,9 +72,13 @@
   anchorcolor = linkblue,
 }
 
+%\renewcommand*{\backref}[1]{(Referred to on page #1.)}
+
 \renewcommand{\sectionautorefname}{\S}
 \renewcommand{\subsectionautorefname}{\S}
 \renewcommand{\subsubsectionautorefname}{\S}
+
+\providecommand*{\listingautorefname}{Listing}
 
 % ------------------------------------------------------------------------------
 % Page geometry
@@ -161,7 +176,7 @@
 % ------------------------------------------------------------------------------
 % Bibliography and citation style
 
-\usepackage{biblatex}
+\usepackage[backref=true]{biblatex}
 
 \newbibmacro*{bbx:parunit}{%
   \ifbibliography{%
@@ -230,6 +245,8 @@
 \newcommand{\email}[1]{\href{mailto:#1}{\texttt{#1}}}
 \renewcommand{\thefootnote}{[\roman{footnote}]}
 
+\newcommand{\naive}[0]{{na\"{\i}ve}}
+
 % ------------------------------------------------------------------------------
 
 % ==============================================================================
@@ -282,7 +299,7 @@ the semantics of the children of that node (its ``out-neighbors''). In addition
 to a PEG, equality saturation has two other inputs:
 
 \footnotetext{
-  Note that the way PEGs are defined in \cite{tate-2009} is actually more
+  Note that the way PEGs are defined in~\cite{tate-2009} is actually more
   specific (due to the details of optimizing imperative languages) than the
   way I will use the term in this paper; this is one of the ways in which
   this description of equality saturation is more generic than previous
@@ -307,6 +324,7 @@ to a PEG, equality saturation has two other inputs:
   losing any expressiveness. By expressing the heuristic function this way,
   the combinatorial optimization we do later can be incremental, as performance
   is a local property (i.e.: it is a catamorphism).
+  \fixme{remove this, it's already covered in \autoref{sec:heuristic-caching}}
 
   \footnotetext{
     $R$ here is typically a partially ordered semiring; usually this will be
@@ -320,15 +338,15 @@ back into a control flow graph for code generation. Since equality saturation
 involves a time-consuming breadth-first equational proof search, there is also
 an ``anytime'' variant of equality saturation where the best known PEG so far
 is emitted every so often (a user-specified \textit{timer} of type
-\texttt{IO Bool} is called every time a rule is applied, and if it returns
-\texttt{True}, the best PEG found so far is passed to a user-specified
+\haskell{IO Bool} is called every time a rule is applied, and if it returns
+\haskell{True}, the best PEG found so far is passed to a user-specified
 \textit{callback}). Since performance is expressed as a local property (a side
 effect of referential transparency), we can cache evaluations of the performance
 heuristic on parts of the code that have not changed during equality saturation,
 so the anytime variant of equality saturation is not asymptotically slower than
 the traditional variant.
 
-Consider the types described in Listing~\ref{lst:basic-eqsat}. This is the most
+Consider the types described in \autoref{lst:basic-eqsat}. This is the most
 basic abstract description of equality saturation. The intended semantics of the
 \texttt{saturate} function are the following:
 
@@ -374,7 +392,7 @@ type TermCursor = [Natural]
 
 data Proof label = QED | ApplyRule TermCursor label (Proof label)
 
-type Heuristic m node real = (node -> [real] -> m real)
+type Heuristic m node real = (Term node -> m real)
 
 type Timer m = m Bool
 
@@ -382,7 +400,7 @@ type Callback m node real label
   = ( Term node   -- The best term discovered so far
     , real        -- The quality of this term
     , Proof label -- A proof of equality with the original term
-    ) -> m ()
+    ) -> m Bool   -- Returning False here will quit saturation
 
 saturate :: (Ord real, Monad m)
          => LTRS node label            -- The rewrite rules to optimize with
@@ -396,16 +414,27 @@ saturate :: (Ord real, Monad m)
 \label{lst:basic-eqsat}
 \end{listing}
 
+\fixme{explain more about eqsat}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 \chapter{Improving performance}
 \label{sec:improving-performance}
 
-\section{Sharing}
-\label{sec:sharing}
+\fixme{introduction paragraph}
 
-The first problem with the version of equality saturation I have shown you is
-that it doesn't account for sharing in the EPEG. We can solve this via
-hash-consing, although the presence of cycles in the EPEG presents a problem for
-most hash-consing algorithms. The solution is to compute the set of
+\section{Avoiding intermediate data structures}
+\label{sec:avoiding-intermediates}
+
+\sfixme{}
+
+\section{Maximal sharing}
+\label{sec:msharing}
+
+The version of equality saturation I have shown you thus far has a major issue:
+it doesn't account for sharing in the EPEG. We can solve this via hash-consing,
+although the presence of cycles in the EPEG presents a problem for most
+hash-consing algorithms. The solution is to compute the set of
 strongly-connected components (SCCs) of the EPEG, and then hash-cons the graph
 the nodes of which are pairs of EPEG nodes and the SCCs they belong to and
 the edges of which are a spanning tree of the EPEG. Pairing the nodes with their
@@ -417,7 +446,7 @@ can be recovered by reintroducing the cycles from the SCCs.
 
 Consider any term rewriting system with a rule like $f(x, y) \mapsto f(y, x)$
 for some function symbol $f$; it is clear that such a rewrite rule will cause
-a na\"{\i}ve implementation of equality saturation to run forever on any term
+a \naive{} implementation of equality saturation to run forever on any term
 including $f$, since the rule can always be applied. For computability-theoretic
 reasons it is impossible to prevent all such loops, but in many cases we can
 prevent loops in the following way:
@@ -436,61 +465,436 @@ prevent loops in the following way:
   = \{(i, v_A(i) \lor v_B(i)) \mid i \in \{0, \ldots, n - 1\}\}$.
 }
 @ {%
-  If the $i$th rule in the term rewriting system is applied to node $A$, first
-  check whether $v_A(i) = 1$. If so, then skip applying this rule. Otherwise,
-  set $v_A(i)$ to $1$ and apply the rule.
+  If the $i$th rule in the term rewriting system is going to be applied to
+  node $A$, first check whether $v_A(i) = 1$. If so, then skip applying this
+  rule. Otherwise, set the value of $v_A(i)$ to $1$ and apply the rule.
 }
 \end{easylist}
+
+Unfortunately, as the number of rules increases, this solution becomes slower
+and slower, as the bitvectors will tend to be sparse (mostly zeros). Ideally,
+an adaptive data structure would be used that is the same as a bitvector as
+long as the size of the bitvector is smaller than that of a cache line, and once
+this limit is reached, it becomes a trie or hashset. Since the number of rules
+is completely known as soon as equality saturation begins, such an adaptive data
+structure need not have any runtime overhead relative to its underlying data
+structures.
 
 \section{Online SCC computation}
 \label{sec:online-scc}
 
-The sharing algorithm described in \autoref{sec:sharing} requires recomputation
+The sharing algorithm described in \autoref{sec:msharing} requires recomputation
 of the strongly-connected component graph of the EPEG every time a node is
 added. This is inefficient, since most of the work done in each SCC computation
 will be similar before and after the addition of a node. This inefficiency can
 be prevented by using any of the online algorithms for SCC computation. As of
 this writing, the state of the art for online SCC computation is described in
-a 2015 paper by Bender et al.: \cite{bender-2015}.
+a 2015 paper~\cite{bender-2015} by Bender et al. There are two algorithms
+defined in the paper by Bender: one that is optimal for sparse graphs, and one
+that is optimal for dense graphs. It is not clear to me which algorithm is more
+relevant to equality saturation, since although it seems at first glance that
+our graphs are sparse, the whole point of an EPEG is to maximize sharing, so
+it may be that the graphs end up being dense. This will probably require
+empirical study; it is likely that constant factors are a bigger concern than
+the asymptotics of these two algorithms.
 
-\chapter{RemoveMe: Outline}
+\section{Term indexing}
+\label{sec:term-indexing}
+
+\textit{Term indexing} is a field of study in which the problem of compactly
+storing a large number of open terms such that the index can be queried for a
+subset that includes the set of added terms that will unify with a query term
+\cite{handbook-ch26}. A term index is best described by the typeclass shown in
+\autoref{lst:term-index}.
+
+A term index effectively acts as a filter that can be applied before matching;
+it allows false positives, but does not allow false negatives, much like a
+Bloom filter~\cite{bloom-1970}. By filtering the set of patterns before we do
+pattern matching, we can decrease the amount of work that needs to be done
+during pattern matching. A term index is a \textit{perfect filter} if it never
+returns a false positive; otherwise it is an \textit{imperfect filter}.
+
+\begin{listing}[ht]
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+type Key node var = (Ord node, Ord var)
+class TermIndex (index :: * -> * -> * -> *) where
+  -- An injective type family defining the mutable version of an immutable
+  -- term index. The extra s parameter is for an ST-style state token.
+  type Mut index (node :: *) (var :: *) (value :: *) (s :: *)
+    = (result :: *) | result -> index
+
+  empty        :: index node var value
+  freeze       :: Mut index node var value s
+               -> ST s (index node var value)
+  thaw         :: index node var value
+               -> ST s (Mut index node var value s)
+  insertMany   :: (Key node var)
+               => Mut index node var value s
+               -> [(TTerm node var, value)]
+               -> ST s ()
+  queryMany    :: (Key node var, Monad m)
+               => index node var value
+               -> [(TTerm node var, value -> m any)]
+               -> m ()
+  queryManyMut :: (Key node var)
+               => Mut index node var value s
+               -> [(TTerm node var, value -> ST s any)]
+               -> ST s ()
+\end{minted}
+\caption{A typeclass describing a term index}
+\label{lst:term-index}
+\end{listing}
+
+Every \haskell{TermIndex} has a mutable (\haskell{Mut}) version and an immutable
+version. The \haskell{freeze} and \haskell{thaw} methods allow interconversion
+between these types. The \haskell{empty} method is the only way to create a term
+index from nothing. The laws of the \haskell{TermIndex} typeclass are:
+
+\vspace{-1em}
+\begin{align}
+  \mtt{\haskell{thaw} \haskell{>=>} \haskell{freeze}}
+  & = \haskell{pure}
+  \label{eq:term-index-law-1} \\
+  \mtt{\haskell{insertMany} $i$ \haskell{[]}}
+  & = \haskell{pure ()}
+  \label{eq:term-index-law-2} \\
+  \mtt{\haskell{insertMany} $i$ ($x \mathbin{\haskell{++}} y$)}
+  & = (\mtt{\haskell{insertMany} $i$ $x$ \haskell{>>} \haskell{insertMany} $i$ $y$})
+  \label{eq:term-index-law-3} \\
+  \mtt{\haskell{queryMany} $i$ \haskell{[]}}
+  & = \haskell{pure ()}
+  \label{eq:term-index-law-4} \\
+  \mtt{\haskell{queryMany} $i$ $(x \mathbin{\haskell{++}} y)$}
+  & = (\mtt{\haskell{queryMany} $i$ $x$ \haskell{>>} \haskell{queryMany} $i$ $y$})
+  \label{eq:term-index-law-5} \\
+  \mtt{\haskell{queryMany} \haskell{empty} $q$}
+  & = \haskell{pure ()}
+  \label{eq:term-index-law-6} \\
+  \mtt{\haskell{queryManyMut} $i_m$ $q$}
+  & = (\mtt{\haskell{freeze} $i_m$}
+    \:\: \haskell{>>=} \:\:
+    (\lambda i \, \mapsto \, \mtt{\haskell{queryMany} $i$ $q$}))
+  \label{eq:term-index-law-7}
+\end{align}
+
+The reason I define the fundamental insertion and querying operations of a
+\haskell{TermIndex} as \haskell{insertMany} and \haskell{queryMany}, rather
+than as
+
+\vspace{-0.5em}
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+class TermIndex (index :: * -> * -> * -> *) where
+  -- ... other definitions ...
+  insert :: (Key n v) => Mut index n v val s -> TTerm n v -> val -> ST s ()
+  query  :: (Key n v, Monad m) => index n v val -> TTerm n v -> m [val]
+\end{minted}
+\vspace{0em}
+
+is for two reasons. Firstly, there are some term indexing data structures that
+are more efficient when you are inserting or querying multiple terms at the same
+time, and since \haskell{insert} and \haskell{query} can be defined in terms of
+\haskell{insertMany} and \haskell{queryMany} relatively easily, it makes more
+sense for \haskell{insertMany} and \haskell{queryMany} to be the primitive
+operations. Secondly, by having \haskell{queryMany} accept a monadic callback
+rather than returning a list of results, we can avoid the creation of
+intermediate data structures.
+
+While it is possible to define \haskell{insert} and \haskell{query} in terms of
+\haskell{insertMany} and \haskell{queryMany} respectively, it causes an
+additional allocation and pointer indirection for the singleton list, so in an
+actual version of the \haskell{TermIndex} typeclass, \haskell{insert} and
+\haskell{query} would be defined as methods with default implementations.
+For additional ease of defining instances, \haskell{insertMany} and
+\haskell{queryMany} can also have default implementations in terms of
+\haskell{insert} and \haskell{query} respectively, and to avoid people writing
+empty instances (which would loop infinitely), a \texttt{MINIMAL} pragma can be
+added, which will allow GHC to check that a valid set of methods have been
+defined.
+
+\subsection{Discrimination trees}
+\label{sec:discrimination-trees}
+
+A \textit{discrimination tree} is a term-indexing data structure based on a
+trie~\cite{handbook-ch26}. Define the \textit{path} of a term
+\haskell{t :: TTerm n v} to be a value of type \haskell{[Maybe n]} representing
+the preorder traversal of the term, replacing any variable nodes with
+\haskell{Nothing}. Inserting a term-value-pair into a discrimination tree is the
+same as inserting the path computed from the term along with the value into a
+trie of type \haskell{Trie (Maybe n) val}. Querying a discrimination tree for a
+given term \haskell{q :: TTerm n v} is the same as computing the path of
+\haskell{q} and doing a backtracking search through the trie for matching paths;
+this is much the same as the traditional trie retrieval algorithm, except that
+when the \haskell{Maybe n} value you're searching for at a node is
+\haskell{Nothing}, you nondeterministically search in all the the children, and
+when the value you're searching for at a node is \haskell{Just n}, you
+nondeterministically search in the \haskell{n} and \haskell{Nothing} children.
+
+Note that discrimination trees only work when your terms don't include variadic
+function symbols. If they do include variadic function symbols, you can still
+use discrimination trees by simply augmenting your node type with the number of
+children at that node, effectively introducing one function symbol for every
+possible variadic usage.
+
+For cache efficiency, it is ideal to implement a discrimination tree using a
+trie based on a contiguous growable array (and the children of each node should
+be referenced with \haskell{Word32} offsets rather than pointers, since in
+practice the tree will rarely exceed $\SI{4}{\gibi\byte}$).
+
+\subsection{Substitution trees}
+\label{sec:substitution-trees}
+
+A \textit{substitution tree} is a term-indexing data structure based on a tree
+of substitutions with values at leaf nodes~\cite{graf-1994,handbook-ch26}.
+The intended semantics of such a tree is that each substitution in composed
+with the substitutions above it to compute a filter for terms.
+
+\vspace{-0.5em}
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+type Sub node var = Map var (TTerm node var)
+
+domain :: Sub node var -> Set var
+
+type Indicator = Int
+
+data SubTree node var value
+  = Leaf value
+  | Branch (Sub node (Either Indicator var)) [SubTree node var value]
+\end{minted}
+\vspace{0em}
+
+There are three invariants that must be true for the \haskell{SubTree} type,
+which may be enforced by making \haskell{SubTree} an abstract type in its own
+module. Firstly, if the size of the list of children at a \haskell{Branch} node
+is $n \in \mbb{N}$, then it must always be true that $n \neq 1$. Secondly, for
+every path
+\texttt{[(\haskell{σ₁}, \haskell{ω₁}), …, (\haskell{σₙ}, \haskell{ωₙ})] \haskell{::} \haskell{[Sub n (Either Indicator v), [SubTree n v val]]}}
+from the root to a leaf of a non-empty tree it must be the case that the
+variables introduced by the composition $\haskell{ωₙ} \comp \ldots \comp \haskell{ω₁}$ are
+all \haskell{Left i} for some \haskell{i :: Indicator}.
+Thirdly, for every such path and every $j \in \{1, \ldots, n - 1\} \subset \mbb{N}$,
+it must be the case that, when we define $k = j + 1$,
+\texttt{\haskell{null} (\haskell{domain} \haskell{σₖ} ∩ (\haskell{domain} \haskell{σ₀} ∪ … ∪ \haskell{domain} \haskell{σⱼ})) \haskell{==} \haskell{True}}.
+
+Querying a substitution tree for a term \haskell{q :: TTerm n v} involves doing
+a backtracking search; \sfixme{}.
+
+\section{Caching performance heuristic executions}
+\label{sec:heuristic-caching}
+
+One of the disadvantages of the anytime version of equality saturation described
+thus far is that the performance heuristic must be run on every node of the
+EPEG every time the timer returns \haskell{True}. For a large class of
+performance heuristics, it turns out that this is not actually necessary
+however. Since the semantics of a PEG/EPEG node are defined solely by the node
+contents and the children of that node, any performance heuristic that is
+definable solely in terms of the semantics of a node can be expressed as a
+\textit{catamorphism}; a function of type \haskell{(node, [real]) -> real} that
+is folded over the tree. A sufficient but not necessary condition for a
+heuristic being definable in this way is if the definition of semantics is
+purely operational in nature; this is true in most strictly evaluated languages
+but not in many non-strict languages.
+
+If a heuristic is definable as a catamorphism, then we can cache heuristic
+executions by noticing that any subtree of the EPEG that is unchanged between
+the current EPEG and the last execution of \haskell{selectBest} \sfixme{}
+will have the same best sub-PEG as the last execution.
+
+We can take this further, however. If we know that we have saturated a subtree
+with equalities (e.g.: since the cycle-detection algorithm described in
+\autoref{sec:cycle-detection} collects information on what rules have been
+applied to a given node, we can propagate a token that represents the fact that
+a given subtree is saturated), then we can entirely throw out all the other
+(non-optimal) sub-PEGs in that subtree. Note that when we throw away the
+non-optimal sub-PEGs, we don't reset the cycle-detection data structures
+associated with each node, thereby preventing the saturation algorithm from
+exploring already-explored parts of the search space.
+
+This may cause repeated work if rewriting ends up generating the same code,
+which we can prevent by ``axiomatizing'' the optimization; introducing a
+(derivable) rewrite rule with ground terms on both sides to the primitive
+term-rewriting system used for equality saturation. This added axiom may have to
+be specially marked so that the cycle-detection data structure gets initialized
+correctly after applying it.
+
+It is unclear to me whether any of these ideas will actually create speed
+improvements in practice, but they are probably worth exploring.
+
+\section{Parallelization}
+\label{sec:parallelization}
+
+Since equality saturation is, at its heart, a breadth-first search, it seems
+quite amenable to parallelization. However, the maximal sharing algorithm
+described in \autoref{sec:msharing} creates a problem; worker threads cannot
+work independently on different parts of the graph without mutexes if sharing
+might combine these independent sections. There are several possible solutions
+to this, but the simplest to implement is that the maximal sharing algorithm
+should run independently of the worker threads, locking the entire graph while
+deduplication occurs. In this exposition of equality saturation, we need to
+freeze the entire graph anyway to capture the corresponding \haskell{TTerm} to
+be passed to the callback, so this seems like not a huge loss, but there may be
+a way to implement parallel anytime equality saturation with less time devoted
+to blocking.
+
+\section{Automatically-applied rules}
+\label{sec:automatic-rules}
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Improving expressiveness}
+\label{sec:improving-expressiveness}
+
+\fixme{introduction paragraph}
+
+\section{Variadic function symbols}
+\label{sec:variadic-function-symbols}
+
+Many languages contain constructors that are in some sense variadic.
+This variadicity can be eliminated by adding a constructor to the \haskell{Term}
+type that allows for variadic function symbols. This would allow term indexing
+data structures like discrimination trees, which do not ordinarily handle
+variadic function symbols, to be expressed in a more type-safe way.
+
+\section{Adding equational axioms}
+\label{sec:equational-axioms}
+
+Many languages contain constructors that should be considered equal under some
+non-syntactic equivalence relation. For example, if you have multiple
+independent modules in the code you are optimizing, then cross-module inlining
+is only possible if the constructor for a set of modules is actually considered
+modulo associativity and commutativity. You can, of course, add rewrite rules
+to your theory corresponding to associativity and commutativity, but in many
+cases this will be much slower (due to spurious copying) than a dedicated solver
+for associative-commutative matching. There are a number of theories that can
+be integrated into the matching algorithm, including:
 
 \begin{easylist}[enumerate]
-@ Equality saturation in increasing complexity
-@@ The abstract interface
-@@ The simplest correct implementation
-@@ Improving performance
-@@@ Sharing
-@@@ Online algorithm for strongly-connected components (\cite{bender-2015})
-@@@ Term indexing
-@@@@ Discrimination trees (\cite{handbook-ch26})
-@@@@ Substitution trees (\cite{graf-1994})
-@@@@ Context trees (\cite{ganzinger-2001})
-@@@ Caching performance heuristic executions
-@@@ Parallelization
-@@ Improving expressiveness
-@@@ Adding equational axioms
-@@@@ See page 225 of \cite{siekmann-1989}
-@@@@ ACU/ACI/BR/AG?
-@@@ Conditional rewriting (\cite{rosu-2005})
-@@ Improving correctness
-@@@ Type systems
-@@ Integration with other tools
-@@@ K Framework (\cite{rosu-2010})
-@@@ IncA / $\mathrm{IncA}_L$ (\cite{szabo-2016}, \cite{szabo-2017})
-@ Referentially transparent languages
-@@ Term-rewriting systems (Adithya Murali, Alexander Altman, Remy Goldschmidt)
-@@ Interaction nets (\cite{asperti-1998})
-@@ CCCs (\cite{elliott-2017})
-@ Future work
-@@ Incremental equality saturation
-@@@ Compute difference of old and new PEG spanning tree (\cite{lempsink-2009})
-@@@ If there are common subtrees, apply the proofs from the old EPEG to the new EPEG, and exclude the explored proof branches
-@@ Going beyond equality?
-@@ Accounting for laziness (\cite{okasaki-1998})
-@@ Dependent types (\cite{selsam-2017})
-@@ Optimizing an equality saturation optimizer with equality saturation
+@ Semigroups (\textsc{a})
+@ Abelian semigroups (\textsc{ac})
+@ Abelian monoids (\textsc{acu})
+@ Idempotent abelian semigroups (\textsc{aci})
+@ Boolean rings (\textsc{br})
+@ Abelian groups (\textsc{ag})
 \end{easylist}
+
+For a relatively comprehensive review of the literature on equational matching
+and unification, see \cite{siekmann-1989}. Further research is needed on the
+asymptotic and in-practice complexity of these matching algorithms to determine
+which ones are relevant to a practical implementation of equality saturation,
+but given that the $\mbb{K}$ Framework implements AC-unification, it is likely
+that this at least is worth implementing.
+
+\section{Conditional rewriting}
+\label{sec:conditional-rewriting}
+
+Many optimizations cannot easily be implemented using a term-rewriting system
+alone; it is often much easier to write optimizations in a \textit{conditional}
+term-rewriting system, in which rules can have boolean side conditions.
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Improving correctness}
+\label{sec:improving-correctness}
+
+\fixme{introduction paragraph}
+
+\section{Type systems}
+\label{sec:type-systems}
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Integration with other tools}
+\label{sec:integration}
+
+\fixme{introduction paragraph}
+
+\section{The $\mathbb{K}$ Framework}
+\label{sec:k-framework}
+
+Citation: \cite{rosu-2010}
+
+\sfixme{}
+
+\section{$\mathrm{IncA}$ / $\mathrm{IncA}_L$}
+\label{sec:inca-incal}
+
+Citation: \cite{szabo-2016}, \cite{szabo-2017}
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Example IR formats}
+\label{sec:example-languages}
+
+\fixme{introduction paragraph}
+
+\section{Cartesian closed categories}
+\label{sec:cccs}
+
+Citation: \cite{elliott-2017}
+
+\sfixme{}
+
+\section{Interaction nets}
+\label{sec:interaction-nets}
+
+Citation: \cite{asperti-1998}
+
+\sfixme{}
+
+\section{Term-rewriting systems}
+\label{sec:term-rewriting-systems}
+
+\sfixme{}
+
+\section{Relational algebra}
+\label{sec:relational-algebra}
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\chapter{Future Work}
+\label{sec:future-work}
+
+\fixme{introduction paragraph}
+
+\section{Incremental equality saturation}
+\label{sec:incremental-eqsat}
+
+\sfixme{}
+
+\begin{easylist}[itemize]
+@ Compute difference of old and new PEG spanning tree (\cite{lempsink-2009})
+@ If there are common subtrees, apply the proofs from the old EPEG to the new EPEG, and exclude the explored proof branches
+\end{easylist}
+
+\section{Beyond equality}
+\label{sec:beyond-equality}
+
+\sfixme{}
+
+\section{Dependent types}
+\label{sec:dependent-types}
+
+Citation: \cite{selsam-2017}
+
+\sfixme{}
+
+\section{Laziness}
+\label{sec:laziness}
+
+Citation: \cite{okasaki-1998}
+
+\sfixme{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % \begin{easylist}[itemize]
 % @ Equality saturation
