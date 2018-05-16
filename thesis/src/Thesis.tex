@@ -25,12 +25,18 @@
 \usepackage[chapter]{tocbibind}
 
 % ------------------------------------------------------------------------------
+% Pseudocode
+
+%\usepackage{algorithm}
+%\usepackage[noend]{algpseudocode}
+
+% ------------------------------------------------------------------------------
 % Watermarks
 
-\usepackage{draftwatermark}
-\SetWatermarkText{Draft}
-\SetWatermarkScale{2}
-\SetWatermarkColor[gray]{0.95}
+%\usepackage{draftwatermark}
+%\SetWatermarkText{Draft}
+%\SetWatermarkScale{2}
+%\SetWatermarkColor[gray]{0.95}
 
 % ------------------------------------------------------------------------------
 % Chapter titles
@@ -98,7 +104,7 @@
 \usepackage{tikz}
 \usepackage[fancy]{tikz-inet}
 \usetikzlibrary{%
-  arrows,shapes,automata,backgrounds,petri,positioning%
+  arrows,cd,shapes,automata,backgrounds,petri,positioning%
 }
 
 % ------------------------------------------------------------------------------
@@ -264,6 +270,9 @@
 \newcommand{\email}[1]{\href{mailto:#1}{\texttt{#1}}}
 \renewcommand{\thefootnote}{[\roman{footnote}]}
 
+\newcommand{\hackage}[1]{%
+  \href{https://hackage.haskell.org/package/#1}{\texttt{#1}}}
+
 \newcommand{\naive}[0]{{na\"{\i}ve}}
 
 % ------------------------------------------------------------------------------
@@ -283,8 +292,10 @@
 
 \maketitle{}
 
+\renewcommand{\baselinestretch}{0.95}\normalsize
 \tableofcontents{}
-\listoflistings{}
+\renewcommand{\baselinestretch}{1.0}\normalsize
+%\listoflistings{}
 %\listofdefinition{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -302,7 +313,18 @@ opportunities to apply optimizations. Equality saturation solves the phase
 ordering problem by restructuring optimization as saturation-based automated
 theorem proving (``forward chaining'') followed by combinatorial optimization.
 
-\sfixme{}
+The equality saturation architecture described in this paper is currently being
+implemented in an open source Apache 2.0 licensed project hosted on GitHub:
+\url{https://github.com/taktoa/eqsat}.
+
+Note that although we often use the Haskell list type constructor \haskell{[]}
+in this paper, a real implementation of equality saturation would likely use
+\haskell{Vector} or \haskell{Seq} from the \hackage{vector} and
+\hackage{containers} libraries respectively. In general, this paper will focus
+on describing algorithms in a specific-but-unperformant way, followed by a
+vague-but-performant descripton.
+
+%\fixme{write more in this section}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -326,6 +348,8 @@ to a PEG, equality saturation has two other inputs:
   expositions.
 }
 
+\vspace{0.5em}
+
 \begin{enumerate}
 \item {%
   A term-rewriting system on PEGs, whose rules define the basic optimizations
@@ -344,6 +368,8 @@ to a PEG, equality saturation has two other inputs:
 }
 \end{enumerate}
 
+\vspace{0.5em}
+
 The output of equality saturation is an optimized PEG, which can then be turned
 back into a control flow graph for code generation. Since equality saturation
 involves a time-consuming breadth-first equational proof search, there is also
@@ -351,15 +377,13 @@ an ``anytime'' variant of equality saturation where the best known PEG so far
 is emitted every so often (a user-specified \textit{timer} of type
 \haskell{IO Bool} is called every time a rule is applied, and if it returns
 \haskell{True}, the best PEG found so far is passed to a user-specified
-\textit{callback}). Since performance is expressed as a local property (a side
-effect of referential transparency), we can cache evaluations of the performance
-heuristic on parts of the code that have not changed during equality saturation,
-so the anytime variant of equality saturation is not asymptotically slower than
-the traditional variant.
+\textit{callback}).
 
 Consider the types described in \autoref{lst:basic-eqsat}. This is the most
 basic abstract description of equality saturation. The intended semantics of the
-\texttt{saturate} function are the following:
+\haskell{saturate} function are the following:
+
+\vspace{0.5em}
 
 \begin{enumerate}
 \item Convert the given term to a PEG, and then to an EPEG.
@@ -401,7 +425,7 @@ upcastTerm :: Term repr node var -> GTerm node var
 type Equation node = (TTerm node Variable, GTerm node Variable)
 
 type TRS  node       = Set (Equation node)
-type LTRS node label = Map (Equation node) label
+type LTRS node label = InjectiveMap (Equation node) label
 
 type TermCursor = [Natural]
 
@@ -429,21 +453,219 @@ saturate :: (Ord real, Monad m)
 \label{lst:basic-eqsat}
 \end{listing}
 
-%The laws of the \haskell{}
+\vspace{2.5em}
 
-\fixme{explain more about eqsat}
+Before we can discuss the laws of the \haskell{saturate} function, we must first
+define some terminology:
+
+\begin{itemize}
+\item {%
+  Define the
+  \textit{application of an \haskell{Equation} to a \haskell{Term} focused at a \haskell{TermCursor}}
+  to be the result of running the following algorithm:
+
+  \vspace{-0.5em}
+  \begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+applyFocused :: Equation n -> Term n -> TermCursor -> Maybe (Term n)
+applyFocused e = go
+  where
+    go :: Term n -> TermCursor -> Maybe (Term n)
+    go t                    [] = rewrite e t
+    go (Node (n, cs)) (i : tc) = do cs' <- iforM cs (\j c -> if i == j
+                                                             then go c tc
+                                                             else pure c)
+                                    pure Node (n, cs')
+    go _                     _ = Nothing
+
+    iforM :: (Monad m) => [a] -> (Int -> a -> m b) -> m [b]
+    iforM xs f = mapM (uncurry f) (zip [0 ..] xs)
+  \end{minted}
+
+  where \haskell{rewrite :: Equation n -> Term n -> Maybe (Term n)} is the
+  function that rewrites a \haskell{Term} using an \haskell{Equation} and
+  returns the rewritten \haskell{Term} iff the left-hand-side of the given
+  \haskell{Equation} unifies with the given \haskell{Term}.
+}
+\item {%
+  Define the
+  \textit{application of a \haskell{Proof} to a \haskell{Term} in an \haskell{LTRS}}
+  to be the result of sequentially applying each rule obtained by looking up
+  the preimage of the label in that \haskell{ApplyRule} node to the
+  \haskell{Term}, focused at the \haskell{TermCursor} of that
+  \haskell{ApplyRule} node. In code, this looks like:
+  \vspace{-0.5em}
+  \begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+applyProof :: LTRS n l -> Proof l -> Term n -> Maybe (Term n)
+applyProof ltrs = flip go
+  where
+    go :: Term n -> Proof l -> Maybe (Term n)
+    go t = \case
+      QED -> pure t
+      (ApplyRule tc l rest) -> do
+        e <- equationFromLabel ltrs l
+        t' <- applyFocused e t tc
+        go t' rest
+  \end{minted}
+  where \haskell{equationFromLabel :: LTRS n l -> l -> Maybe (Equation n)}
+  is the function that looks up the preimage of a label in an \haskell{LTRS}.
+}
+\item {%
+  For most monads \texttt{m}, the denotation of a value \haskell{timer :: Timer m}
+  is a function \texttt{⟦\haskell{timer}⟧} of type \haskell{Context m -> Bool},
+  where \haskell{Context m} is basically a data family. In principle, execution
+  of the timer function could reasonably cause side effects, but we will assume
+  that these side effects cannot affect the semantics of any of the code we are
+  dealing with.
+  If \haskell{timer₁ :: Timer m} and \haskell{timer₂ :: Timer m}, then we say
+  that $\haskell{timer₁} \subseteq \haskell{timer₂}$
+  iff for every \haskell{c :: Context m},
+  \texttt{⟦\haskell{timer₂}⟧ \haskell{c}} being \haskell{True}
+  implies that
+  \texttt{⟦\haskell{timer₁}⟧ \haskell{c}} is \haskell{True}.
+}
+\end{itemize}
+
+Now we can state the informally-defined laws of the \haskell{saturate} function
+as follows:
+
+\begin{itemize}
+\item {%
+  Assume that the following terms exist in scope:
+  \haskell{ltrs :: LTRS n l}, \haskell{h :: Heuristic m n r},
+  \haskell{tᵢ :: Term n}, and \haskell{cb :: Callback m n r l}.
+}
+\item {%
+  Suppose we call
+  \texttt{\haskell{saturate} \haskell{ltrs} \haskell{h} \haskell{tᵢ} (\haskell{pure} \haskell{True}) \haskell{cb}}.
+
+  Define \haskell{calls :: [(Term n, r, Proof l)]} to be the list containing,
+  from earliest to latest, the argument of every call to \haskell{cb} at an
+  arbitrary point in program execution.
+}
+\item {%
+  For every element \haskell{(t, q, p) :: (Term n, r, Proof l)} of
+  \haskell{calls}, the following properties must hold:
+  \begin{enumerate}
+  \item {%
+    It must be the case that \haskell{t} is in the reflexive-transitive closure
+    of the term-rewriting system given by \haskell{ltrs} starting
+    at \haskell{tᵢ}.
+  }
+  \item {%
+    It must be the case that applying \haskell{p} to \haskell{tᵢ}
+    yields \haskell{t}.
+  }
+  \item {%
+    It must be the case that if \texttt{cb (t, q, p) \haskell{:: m Bool}}
+    evaluates to \haskell{True}, then \haskell{(t, q, p)} is the last element
+    of \haskell{calls}.
+  }
+  \end{enumerate}
+}
+\item {%
+  Now assume that \haskell{c₁ :: (Term n, r, Proof l)} and
+  \haskell{c₂ :: (Term n, r, Proof l)} are arbitrary elements of
+  \haskell{calls} such that \haskell{c₁} occurs before \haskell{c₂},
+  and define \haskell{(t₁, q₁, p₁) = c₁} and \haskell{(t₂, q₂, p₂) = c₂}.
+  Then $\haskell{q₁} < \haskell{q₂}$, where ${\le}$ is the partial order
+  defined on the \texttt{r} type.
+}
+\item {%
+  If \haskell{ltrs} is confluent and terminating, then the length of
+  \haskell{calls} must be finite.
+}
+\item {%
+  Suppose we have \haskell{timer₁} and \haskell{timer₂ :: Timer m} and we define
+  \haskell{calls₁} and \haskell{calls₂} to be values of type
+  \haskell{[(Term n, r, Proof l)]} containing, from earliest to latest,
+  the argument of every call to \haskell{cb} during the execution of
+  \texttt{\haskell{saturate} \haskell{ltrs} \haskell{h} \haskell{tᵢ} \haskell{timer₁} \haskell{cb}}
+  and
+  \texttt{\haskell{saturate} \haskell{ltrs} \haskell{h} \haskell{tᵢ} \haskell{timer₂} \haskell{cb}}
+  respectively.
+
+  Then $\haskell{timer₁} \subseteq \haskell{timer₂}$ must imply that
+  \haskell{calls₁} is a subsequence of \haskell{calls₂}.
+}
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \chapter{Improving performance}
 \label{sec:improving-performance}
 
-\fixme{introduction paragraph}
+It turns out that the \naive{} implementation of the abstract interface
+described in \autoref{sec:abstract-eqsat} has a variety of performance problems,
+which we will address in this chapter one-by-one.
 
 \section{Avoiding intermediate data structures}
 \label{sec:avoiding-intermediates}
 
-\sfixme{}
+The algorithm described in \autoref{lst:basic-eqsat} has the \haskell{Callback}
+type accepting a \haskell{Term}. Unfortunately, this means that the relevant
+sub-PEG must entirely be copied every time the callback is called, and any
+sharing in the PEG will be lost after this copy is done. We can solve this by
+defining the \haskell{Callback} type like
+
+\vspace{-0.5em}
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+class (Monad m) => IsTerm (m :: * -> *) (term :: * -> *) where
+  getContents :: term n -> m n
+  forChildren :: term n -> (term n -> m void) -> m ()
+
+getChildren :: (IsTerm (ST s) term) => term n -> ST s [term n]
+getChildren term = do
+  temp <- newSTRef []
+  forChildren term (\child -> modifySTRef' (child :) temp)
+  readSTRef temp
+
+instance (Monad m) => IsTerm m ClosedTTerm where
+  getContents (Node (n,        _)) = pure n
+  forChildren (Node (_, children)) = mapM_ f children
+
+data Callback (m :: *) (node :: *) (real :: *) (label :: *) :: * where
+  Callback :: (IsTerm m term)
+           => ((term node, real, Proof label) -> m Bool)
+           -> Callback m node real label
+\end{minted}
+
+so that it wraps up an \haskell{IsTerm} dictionary, rather than requiring a
+concrete \haskell{Term} value. We can then define an instance
+of \haskell{IsTerm} on a (rooted) PEG type, so that \haskell{saturate} can
+instantiate the existentially quantified type variable bound by the
+\haskell{Callback} constructor to that type.
+
+The reason \haskell{IsTerm} has an extra type parameter corresponding to the
+ambient monad is to account for the possibility that the type we are using
+for PEGs requires a constraint on the ambient monad (e.g.: since a PEG is
+mutable it will likely want a \texttt{m \textasciitilde{} \haskell{ST} s} or
+\texttt{m \textasciitilde{} \haskell{IO}} or \haskell{PrimMonad m} constraint,
+where \haskell{PrimMonad} is a typeclass defined in the
+\href{https://hackage.haskell.org/package/primitive-0.6.3.0/docs/Control-Monad-Primitive.html#t:PrimMonad}{\texttt{primitive}}
+package encompassing monads like \haskell{ST s} and \haskell{IO}
+and \haskell{ReaderT Foo IO} that allow mutation).
+
+\section{Automatically-applied rules}
+\label{sec:automatic-rules}
+
+In some cases, we may have knowledge that a rule is \textit{always} an
+improvement, regardless of the assignment of terms to its metavariables.
+For example, if our cost heuristic is expressed symbolically as a function
+that can be sent to an SMT solver, then for each rule we may try using the
+SMT solver to prove that there is an assignment that makes the cost heuristic
+worse after applying the rule. Then if the SMT solver returns \texttt{unsat},
+we know that the rule is always an improvement.
+
+If we have this knowledge, then it makes sense to make these rules
+\textit{automatic}, in the sense that they are always applied whenever possible,
+before any other rules. Of course, this makes our optimization algorithm greedy,
+since the application of these automatic rules may prevent other rules from
+being applied (and these other rules may be better optimizations). It may be
+possible to avoid this greediness by also accepting a proof that the rule
+doesn't affect the set of applicable optimizations, but I suspect that this
+constraint will be so strong that it excludes nearly all of the relevant rules.
+Finding the least-restrictive constraint on rules for automatic application is
+an interesting subject for future research.
 
 \section{Maximal sharing}
 \label{sec:msharing}
@@ -464,9 +686,8 @@ can be recovered by reintroducing the cycles from the SCCs.
 Consider any term rewriting system with a rule like $f(x, y) \mapsto f(y, x)$
 for some function symbol $f$; it is clear that such a rewrite rule will cause
 a \naive{} implementation of equality saturation to run forever on any term
-including $f$, since the rule can always be applied. For computability-theoretic
-reasons it is impossible to prevent all such loops, but in many cases we can
-prevent loops in the following way:
+including $f$, since the rule can always be applied. In many cases we can
+prevent such loops in the following way:
 
 \begin{itemize}
 \item {%
@@ -531,7 +752,7 @@ pattern matching, we can decrease the amount of work that needs to be done
 during pattern matching. A term index is a \textit{perfect filter} if it never
 returns a false positive; otherwise it is an \textit{imperfect filter}.
 
-\begin{listing}[ht]
+\begin{listing}[b]
 \begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
 type Key node var = (Ord node, Ord var)
 class TermIndex (index :: * -> * -> * -> *) where
@@ -692,46 +913,61 @@ Thirdly, for every such path and every $j \in \{1, \ldots, n - 1\} \subset \mbb{
 it must be the case that, when we define $k = j + 1$,
 \texttt{\haskell{null} (\haskell{domain} \haskell{σₖ} ∩ (\haskell{domain} \haskell{σ₀} ∪ … ∪ \haskell{domain} \haskell{σⱼ})) \haskell{==} \haskell{True}}.
 
-Querying a substitution tree for a term \haskell{q :: TTerm n v} involves doing
-a backtracking search; \sfixme{}.
+Refer to \cite{graf-1994} for a description of the insertion and querying
+algorithms on substitution trees.
+
+% Querying a substitution tree for a term \haskell{q :: TTerm n v} involves doing
+% a backtracking search; \sfixme{}.
 
 \section{Caching performance heuristic executions}
 \label{sec:heuristic-caching}
 
-One of the disadvantages of the anytime version of equality saturation described
-thus far is that the performance heuristic must be run on every node of the
-EPEG every time the timer returns \haskell{True}. For a large class of
-performance heuristics, it turns out that this is not actually necessary
-however. Since the semantics of a PEG/EPEG node are defined solely by the node
-contents and the children of that node, any performance heuristic that is
-definable solely in terms of the semantics of a node can be expressed as a
-\textit{catamorphism}; a function of type \haskell{(node, [real]) -> real} that
-is folded over the tree. A sufficient but not necessary condition for a
-heuristic being definable in this way is if the definition of semantics is
+One of the disadvantages of the version of equality saturation described
+thus far is that the heuristic must be run on every node of the EPEG
+every time the timer returns \haskell{True}. For a large class of heuristics,
+it turns out that this is not actually necessary. Since the EPEG is
+referentially transparent, any heuristic that is definable solely in terms of
+the semantics of a node can be expressed as a catamorphism of type
+\haskell{(node, [real]) -> real}. A sufficient but not necessary condition for
+a heuristic being definable in this way is if the definition of semantics is
 purely operational in nature; this is true in most strictly evaluated languages
-but not in many non-strict languages.
+but not in many lazy languages.
 
 If a heuristic is definable as a catamorphism, then we can cache heuristic
 executions by noticing that any subtree of the EPEG that is unchanged between
-the current EPEG and the last execution of \haskell{selectBest} \sfixme{}
-will have the same best sub-PEG as the last execution.
+the current EPEG and the last time the best sub-PEG was selected will continue
+to have the same best sub-PEG.
 
 We can take this further, however. If we know that we have saturated a subtree
 with equalities (e.g.: since the cycle-detection algorithm described in
 \autoref{sec:cycle-detection} collects information on what rules have been
 applied to a given node, we can propagate a token that represents the fact that
-a given subtree is saturated), then we can entirely throw out all the other
-(non-optimal) sub-PEGs in that subtree. Note that when we throw away the
-non-optimal sub-PEGs, we don't reset the cycle-detection data structures
-associated with each node, thereby preventing the saturation algorithm from
-exploring already-explored parts of the search space.
+a given subtree is saturated), then we can entirely throw out (``garbage
+collect'') all the other (non-optimal) sub-PEGs in that subtree. Note that when
+we throw away the non-optimal sub-PEGs, we don't reset the cycle-detection
+data structures associated with each node, thereby preventing the saturation
+algorithm from exploring already-explored parts of the search space.
 
-This may cause repeated work if rewriting ends up generating the same code,
-which we can prevent by ``axiomatizing'' the optimization; introducing a
-(derivable) rewrite rule with ground terms on both sides to the primitive
-term-rewriting system used for equality saturation. This added axiom may have to
-be specially marked so that the cycle-detection data structure gets initialized
-correctly after applying it.
+There is a slight issue with this ``garbage collection'' strategy. Suppose that
+we garbage collect some nodes, and then another part of the EPEG ends up being
+rewritten to a term that would have gotten shared with the garbage collected
+nodes; this will cause the saturation algorithm to repeat work it has already
+done! To prevent this, we can ``axiomatize'' the optimizations: for each element
+of the equivalence class of terms generated by the sub-EPEG we are ``garbage
+collecting'', we will introduce a (derivable) rewrite rule with ground terms on
+both sides to the term-rewriting system used for equality saturation.
+This added rewrite rule will have to be specially marked so that the
+cycle-detection data structure gets correctly initialized after applying
+it; since we know that the result of that rewrite rule is already the best in
+its equivalence class, we don't want to allow rewriting out of the result
+(e.g.: if a bitvector is used for cycle-detection, it should be filled with $1$s
+rather than the usual $0$s). Of course, even with the space savings given
+by our term index, these added axioms will take up at least as much space as the
+nodes we just garbage collected; the goal here is actually to eliminate
+duplication of edges relating to proofs of equality and wasted time during
+combinatorial optimization. This garbage collection idea also prevents
+equality saturation from being used for translation validation, so it is perhaps
+not worth implementing.
 
 It is unclear to me whether any of these ideas will actually create speed
 improvements in practice, but they are probably worth exploring.
@@ -752,17 +988,17 @@ be passed to the callback, so this seems like not a huge loss, but there may be
 a way to implement parallel anytime equality saturation with less time devoted
 to blocking.
 
-\section{Automatically-applied rules}
-\label{sec:automatic-rules}
-
-\sfixme{}
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \chapter{Improving expressiveness}
 \label{sec:improving-expressiveness}
 
-\fixme{introduction paragraph}
+In \autoref{sec:improving-performance} we discussed ways to improve the
+performance of equality saturation. In this chapter, we will discuss ways to
+improve the \textit{expressiveness} of equality saturation, in two senses:
+some of these improvements will make the set of languages optimizable with a
+generic equality saturation implementation larger, while the rest will simply
+make it easier to use the equality saturation implementation.
 
 \section{Variadic function symbols}
 \label{sec:variadic-function-symbols}
@@ -819,61 +1055,170 @@ algorithm described in \cite{rosu-2005}.
 \chapter{Improving correctness}
 \label{sec:improving-correctness}
 
-\fixme{introduction paragraph}
+In this chapter we will discuss ways to decrease the chance of user error when
+using an equality saturation implementation.
 
-\section{Type systems}
-\label{sec:type-systems}
+\section{Confluence-checking}
+\label{sec:confluence-checking}
 
-\sfixme{}
+Although the term-rewriting systems we accept for equality saturation may not be
+terminating, it seems likely that they will be confluent. Thus it may be
+desirable to enforce this condition in the type of \haskell{saturate}; it should
+only accept a confluent term-rewriting system.
+
+How, then, do we define the type of confluent term-rewriting systems? Simple:
+a pair of a term-rewriting system and a proof certificate of its confluence,
+in some easy-to-check logic like ZF set theory or type theory. The type of
+confluent term-rewriting systems will then be an abstract type whose constructor
+will fail to return if the given proof certificate fails to check (or if the
+proof certificate is not actually a proof of confluence for the associated TRS).
+Since we only care about the ability to check a proof certificate and the
+ability to determine if a given proof certificate is a proof of confluence, we
+can even be polymorphic in the logic used by defining an appropriate typeclass.
+The user may want an escape hatch for non-confluent or
+confluent-but-difficult-to-prove-confluent TRSes, which should be integrated
+into the logic as a proof of falsehood.
+
+Often, the user will not want to manually prove confluence for their TRS.
+As it happens, there are a number of pre-existing algorithms for conservatively
+checking whether a given term-rewriting system is confluent; see
+\cite{felgenhauer-2015} for more details. I am not sure if these algorithms
+emit proof certificates; if they do not, the escape hatch can be used
+(though obviously in this case it is worth writing extensive tests for the
+confluence checker to avoid bugs).
+
+\section{Type-checking}
+\label{sec:type-checking}
+
+%To avoid confusion, in this section we will refer to the types in the language
+%the user gives us (which are value-level entities in the equality saturation
+%implementation) as \textit{sorts}.
+
+If the user gives us a partial function that assigns sorts to terms with
+metavariables (which should be the case for any language with lambda syntax
+and mandatory type annotations) and a subsorting partial order, then we can
+check the validity of the \haskell{Equation}s that make up the \haskell{LTRS}
+given to us by the user.
+
+We do this for each \haskell{Equation} by first using the partial function to
+compute the inferred sorts of the LHS and its metavariables. Then we compute the
+inferred sorts of the RHS and its metavariables. For each metavariable, we
+ensure that the sort inferred for the use site in the RHS is a subsort of the
+sort inferred for the binding site in the LHS. Finally, we ensure that the sort
+of the RHS is a subsort of the sort of the LHS and vice versa (the subsort
+relation is reflexive, so this means the two sorts are equivalent).
+%It is not quite clear to me if this last requirement is maximally loose; it may
+%prevent some otherwise-valid optimizations.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\chapter{Integration with other tools}
-\label{sec:integration}
-
-\fixme{introduction paragraph}
-
-\section{The $\mathbb{K}$ Framework}
-\label{sec:k-framework}
-
-Citation: \cite{rosu-2010}
-
-\sfixme{}
-
-\section{$\mathrm{IncA}$ / $\mathrm{IncA}_L$}
-\label{sec:inca-incal}
-
-Citation: \cite{szabo-2016}, \cite{szabo-2017}
-
-\sfixme{}
+% \chapter{Integration with other tools}
+% \label{sec:integration}
+%
+% \fixme{introduction paragraph}
+%
+% \section{The $\mathbb{K}$ Framework}
+% \label{sec:k-framework}
+%
+% Citation: \cite{rosu-2010}
+%
+% \sfixme{}
+%
+% \section{$\mathrm{IncA}$ / $\mathrm{IncA}_L$}
+% \label{sec:inca-incal}
+%
+% Citation: \cite{szabo-2016}, \cite{szabo-2017}
+%
+% \sfixme{}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \chapter{Example IR formats}
 \label{sec:example-languages}
 
-\fixme{introduction paragraph}
-
 \section{Cartesian closed categories}
 \label{sec:cccs}
 
-Citation: \cite{elliott-2017}
+It is well-known that the internal logic of Cartesian closed categories is
+the simply-typed lambda calculus. Conal Elliott describes in a 2017 paper
+\cite{elliott-2017} a method of converting terms in the simply-typed lambda
+calculus to algebraic expressions in the signature given by
 
-\sfixme{}
+\vspace{-0.5em}
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+class CCC ((~>) :: * -> * -> *) where
+  -- The internal hom of the category
+  type (|=>) (~>) :: * -> * -> *
+  id      :: a ~> a
+  (.)     :: (b ~> c) -> (a ~> b) -> (a ~> c)
+  fork    :: (a ~> x) -> (a ~> y) -> (a ~> (x, y))
+  exl     :: (a, b) ~> a
+  exr     :: (a, b) ~> b
+  apply   :: ((a |=> b), a) ~> b
+  curry   :: ((a, b) ~> c) -> (a ~> (b |=> c))
+  uncurry :: (a ~> (b |=> c)) -> ((a, b) ~> c)
+\end{minted}
 
-\section{Interaction nets}
-\label{sec:interaction-nets}
+Since this representation of the simply-typed lambda calculus has no binders, it
+can be used with equality saturation, though care has to be taken with the
+performance heuristic if the code is to be evaluated lazily.
 
-Citation: \cite{asperti-1998}
+Similar tricks may be possible with other logics internal to categories that
+are expressible in Haskell, see the chart relating flavors of type theory to
+flavors of category theory in
+\cite{nlab-relation-between-type-theory-and-category-theory}.
 
-\sfixme{}
+% \section{Interaction nets}
+% \label{sec:interaction-nets}
+%
+% Citation: \cite{asperti-1998}
+%
+% \sfixme{}
 
 \section{Term-rewriting systems}
 \label{sec:term-rewriting-systems}
 
-\sfixme{}
+In unpublished correspondence between Adithya Murali, Alexander Altman, and
+Remy Goldschmidt (myself), we came up with a method for expressing a
+term-rewriting system \textit{itself} as an entity that can be optimized using
+equality saturation.
 
-% Adithya Murali, Alexander Altman, Remy Goldschmidt
+The datatype equivalent to the type of terms for this system is given as
+\haskell{TermRewritingSystem}:
+
+\vspace{-0.5em}
+\begin{minted}[frame=lines,framesep=2mm,linenos]{haskell}
+type FunctionSymbol = Int
+type Label = Text
+
+data Rule = Rule [Label] (OpenTTerm FunctionSymbol) (OpenTTerm FunctionSymbol)
+
+data TermRewritingSystem = TermRewritingSystem (Set Rule)
+\end{minted}
+
+Note that because \haskell{TermRewritingSystem} uses the \haskell{Set} type in
+its definition, we need to use \textsc{ac}-matching when implementing this.
+
+The primitive rules used in equality saturation for this language are
+composition of rules to create new rules (with the lists of labels concatenated)
+and deletion of an unlabelled rule $r = X \mapsto Y$ if the commutative diagram
+below is satisfied:
+
+\begin{figure}[h!]
+\centering
+\begin{tikzcd}
+I
+\arrow[r,hook]
+\arrow[r,dashed,to=Y,bend left=50]
+& X \arrow[r,"r"]
+& |[alias=Y]| Y
+\end{tikzcd}
+\label{fig:deletion-cd}
+\end{figure}
+
+This is a necessary condition for a rule to be deleted; in words, we would
+describe it as ``for every instance $I$ of the pattern term $X$, there must
+exist another way to get to $Y$''.
 
 \section{Relational algebra}
 \label{sec:relational-algebra}
@@ -893,8 +1238,6 @@ I am not sure.
 
 \chapter{Future Work}
 \label{sec:future-work}
-
-\fixme{introduction paragraph}
 
 \section{Incremental equality saturation}
 \label{sec:incremental-eqsat}
