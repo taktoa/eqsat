@@ -19,7 +19,7 @@ import qualified EqSat                                  as EqSat
 import           EqSat.Domain                           (Domain)
 import           EqSat.Equation                         (Equation)
 import qualified EqSat.Equation                         as Equation
-import qualified EqSat.Internal.GraphMatching           as GraphMatching
+import qualified EqSat.Internal.BipartiteMatching       as BipartiteMatching
 import           EqSat.Internal.Matrix                  (Matrix)
 import qualified EqSat.Internal.Matrix                  as Matrix
 import           EqSat.Internal.MBitmap                 (MBitmap)
@@ -221,11 +221,11 @@ test_EqSat_Internal_MGraph
       -- FIXME: write property tests
     ] |> Tasty.testGroup "EqSat.Internal.MGraph" |> pure
 
--- | Property tests for "EqSat.Internal.GraphMatching".
-test_EqSat_Internal_GraphMatching :: IO TestTree
-test_EqSat_Internal_GraphMatching
+-- | Property tests for "EqSat.Internal.BipartiteMatching".
+test_EqSat_Internal_BipartiteMatching :: IO TestTree
+test_EqSat_Internal_BipartiteMatching
   = [ -- FIXME: write property tests
-    ] |> Tasty.testGroup "EqSat.Internal.GraphMatching" |> pure
+    ] |> Tasty.testGroup "EqSat.Internal.BipartiteMatching" |> pure
 
 -- | Property tests for "EqSat.Internal.Matrix".
 test_EqSat_Internal_Matrix :: IO TestTree
@@ -249,7 +249,7 @@ propertyTests = do
     , test_EqSat_Internal_MHashMap
     , test_EqSat_Internal_MBitmap
     , test_EqSat_Internal_MGraph
-    , test_EqSat_Internal_GraphMatching
+    , test_EqSat_Internal_BipartiteMatching
     , test_EqSat_Internal_Matrix
     ]
 

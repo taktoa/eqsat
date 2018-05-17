@@ -11,7 +11,7 @@ import qualified EqSat                                  as EqSat
 import           EqSat.Domain                           (Domain)
 import           EqSat.Equation                         (Equation)
 import qualified EqSat.Equation                         as Equation
-import qualified EqSat.Internal.GraphMatching           as GraphMatching
+import qualified EqSat.Internal.BipartiteMatching       as BipartiteMatching
 import           EqSat.Internal.Matrix                  (Matrix)
 import qualified EqSat.Internal.Matrix                  as Matrix
 import           EqSat.Internal.MBitmap                 (MBitmap)
