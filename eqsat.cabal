@@ -18,7 +18,7 @@ synopsis:                 A generic Haskell implementation of the
 description:              A generic Haskell implementation of the
                           equality saturation algorithm for superoptimization.
 extra-source-files:       README.md
-tested-with:              GHC == 8.0.2
+tested-with:              GHC == 8.2.2
 
 --------------------------------------------------------------------------------
 
@@ -63,8 +63,6 @@ library
                         , prettyprinter               >= 1.1   && < 1.2
                         , prettyprinter-ansi-terminal >= 1.1   && < 1.2
                         , primitive                   >= 0.6   && < 0.7
-                        , QuickCheck                  >= 2.9   && < 2.10
-                        , quickcheck-instances        >= 0.3   && < 0.4
                         , sbv                         >= 7.5   && < 7.7
                         , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
@@ -73,10 +71,8 @@ library
                         , tasty-hedgehog              >= 0.1   && < 0.2
                         , tasty-html                  >= 0.4   && < 0.5
                         , tasty-hunit                 >= 0.9   && < 0.10
-                        , tasty-lens                  >= 0.3   && < 0.4
-                        , tasty-quickcheck            >= 0.8   && < 0.9
                         , tasty-smallcheck            >= 0.8   && < 0.9
-                        , template-haskell            >= 2.9   && < 2.12
+                        , template-haskell            >= 2.9   && < 2.13
                         , text                        >= 1.2   && < 1.3
                         , text-short                  >= 0.1   && < 0.2
                         , transformers                >= 0.4   && < 0.6
@@ -165,8 +161,6 @@ test-suite tests
                         , prettyprinter               >= 1.1   && < 1.2
                         , prettyprinter-ansi-terminal >= 1.1   && < 1.2
                         , primitive                   >= 0.6   && < 0.7
-                        , QuickCheck                  >= 2.9   && < 2.10
-                        , quickcheck-instances        >= 0.3   && < 0.4
                         , sbv                         >= 7.5   && < 7.7
                         , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
@@ -175,10 +169,8 @@ test-suite tests
                         , tasty-hedgehog              >= 0.1   && < 0.2
                         , tasty-html                  >= 0.4   && < 0.5
                         , tasty-hunit                 >= 0.9   && < 0.10
-                        , tasty-lens                  >= 0.3   && < 0.4
-                        , tasty-quickcheck            >= 0.8   && < 0.9
                         , tasty-smallcheck            >= 0.8   && < 0.9
-                        , template-haskell            >= 2.9   && < 2.12
+                        , template-haskell            >= 2.9   && < 2.13
                         , text                        >= 1.2   && < 1.3
                         , text-short                  >= 0.1   && < 0.2
                         , transformers                >= 0.4   && < 0.6
