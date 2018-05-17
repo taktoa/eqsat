@@ -82,11 +82,9 @@ cborEncoder f = MkEncoder (f .> CBOR.Write.toLazyByteString)
 
 -- | FIXME: doc
 #if __GLASGOW_HASKELL__ >= 802
-newtype Compact a
-  = MkCompact (Compact.Compact a)
+type Compact a = Compact.Compact a
 #else
-newtype Compact a
-  = MkCompact a
+type Compact a = a
 #endif
 
 -- | FIXME: doc
@@ -126,7 +124,7 @@ unsafeReadCompact
   :: (Typeable a)
   => Decoder a
   -> FilePath
-  -> IO (Either (PP.Doc Void) (Compact a))
+  -> IO (Either String (Compact a))
 
 -- | FIXME: doc
 hPutCompact
@@ -145,19 +143,19 @@ hUnsafeGetCompact
 
 #if __GLASGOW_HASKELL__ >= 802
 
-compact               = coerce Compact.compact
-compactWithSharing    = coerce Compact.compactWithSharing
-compactAdd            = coerce Compact.compactAdd
-compactAddWithSharing = coerce Compact.compactAddWithSharing
-compactSized          = coerce Compact.compactSized
-getCompact            = coerce Compact.getCompact
-isCompact             = coerce Compact.isCompact
-compactSize           = coerce Compact.compactSize
+compact               = Compact.compact
+compactWithSharing    = Compact.compactWithSharing
+compactAdd            = Compact.compactAdd
+compactAddWithSharing = Compact.compactAddWithSharing
+compactSized          = Compact.compactSized
+getCompact            = Compact.getCompact
+isCompact             = Compact.isCompact
+compactSize           = Compact.compactSize
 
-writeCompact          = const (coerce Compact.writeCompact)
-unsafeReadCompact     = const (coerce Compact.unsafeReadCompact)
-hPutCompact           = const (coerce Compact.hPutCompact)
-hUnsafeGetCompact     = const (coerce Compact.hUnsafeGetCompact)
+writeCompact          = const Compact.writeCompact
+unsafeReadCompact     = const Compact.unsafeReadCompact
+hPutCompact           = const Compact.hPutCompact
+hUnsafeGetCompact     = const Compact.hUnsafeGetCompact
 
 #else
 
