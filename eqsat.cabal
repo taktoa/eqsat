@@ -78,6 +78,7 @@ library
                         , tasty-smallcheck            >= 0.8   && < 0.9
                         , template-haskell            >= 2.9   && < 2.12
                         , text                        >= 1.2   && < 1.3
+                        , text-short                  >= 0.1   && < 0.2
                         , transformers                >= 0.4   && < 0.6
                         , unexceptionalio             >= 0.3   && < 0.4
                         , unordered-containers        >= 0.2   && < 0.3
@@ -179,6 +180,7 @@ test-suite tests
                         , tasty-smallcheck            >= 0.8   && < 0.9
                         , template-haskell            >= 2.9   && < 2.12
                         , text                        >= 1.2   && < 1.3
+                        , text-short                  >= 0.1   && < 0.2
                         , transformers                >= 0.4   && < 0.6
                         , unexceptionalio             >= 0.3   && < 0.4
                         , unordered-containers        >= 0.2   && < 0.3

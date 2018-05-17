@@ -34,7 +34,7 @@ import           Data.Loc               (Loc)
 import qualified Data.Loc               as Loc
 import           Data.Maybe             (Maybe (Just, Nothing))
 import           Data.Ord               (Ord (compare), Ordering)
-import           Data.Text              (Text)
+import           Data.Text.Short        (ShortText)
 import           Data.Unique            (Unique, hashUnique, newUnique)
 
 import           GHC.Generics           (Generic)
@@ -46,7 +46,7 @@ import           Numeric.Natural        (Natural)
 data Variable
   = MkVariable
     { variableID   :: !Unique
-    , variableName :: !(Maybe Text)
+    , variableName :: !(Maybe ShortText)
     , variableLoc  :: !(Maybe Loc)
     }
   deriving (Generic)
@@ -73,7 +73,7 @@ instance Hashable Variable where
 -- | FIXME: doc
 fresh
   :: (MonadIO m)
-  => Maybe Text
+  => Maybe ShortText
   -- ^ FIXME: doc
   -> Maybe Loc
   -- ^ FIXME: doc
@@ -93,7 +93,7 @@ freshSimple = fresh Nothing Nothing
 -- | FIXME: doc
 freshNamed
   :: (MonadIO m)
-  => Text
+  => ShortText
   -- ^ FIXME: doc
   -> m Variable
   -- ^ FIXME: doc
@@ -111,7 +111,7 @@ freshLocated loc = fresh Nothing (Just loc)
 -- | FIXME: doc
 freshNamedLocated
   :: (MonadIO m)
-  => Text
+  => ShortText
   -- ^ FIXME: doc
   -> Loc
   -- ^ FIXME: doc
@@ -144,13 +144,13 @@ setID ident var = var { variableID = ident }
 getName
   :: Variable
   -- ^ FIXME: doc
-  -> Maybe Text
+  -> Maybe ShortText
   -- ^ FIXME: doc
 getName = variableName
 
 -- | FIXME: doc
 setName
-  :: Maybe Text
+  :: Maybe ShortText
   -- ^ FIXME: doc
   -> Variable
   -- ^ FIXME: doc
