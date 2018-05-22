@@ -8,6 +8,7 @@
 {-# LANGUAGE KindSignatures       #-}
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE RoleAnnotations      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE StandaloneDeriving   #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 
@@ -31,9 +32,13 @@ module EqSat.Term
   , mapNode
   , freeVars
   , coerceTTermToGTerm
+  , genTTerm
+  , genGTerm
   ) where
 
 --------------------------------------------------------------------------------
+
+import           Control.Monad          (forM)
 
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
@@ -47,23 +52,37 @@ import           GHC.Generics           (Generic)
 
 import           Data.Hashable          (Hashable (hashWithSalt))
 
-import           Flow                   ((|>))
+import           Flow                   ((.>), (|>))
+
+import qualified Hedgehog               as HH
+import qualified Hedgehog.Gen           as Gen
+import qualified Hedgehog.Range         as Range
 
 import           EqSat.Variable         (Variable)
 
-import           EqSat.Internal.Refined (NonNegative, Refined, unrefine)
+import           EqSat.Internal.Refined
+                 (NonNegative, Refined, refine, unrefine, unsafeRefine)
 
 --------------------------------------------------------------------------------
 
+-- | FIXME: doc
 data TermRepr
-  = TermReprG
-  | TermReprT
+  = -- | FIXME: doc
+    TermReprG
+  | -- | FIXME: doc
+    TermReprT
   deriving (Generic)
 
+-- | FIXME: doc
 instance Hashable TermRepr
 
+-- | FIXME: doc
 type ReprG = 'TermReprG
+
+-- | FIXME: doc
 type ReprT = 'TermReprT
+
+--------------------------------------------------------------------------------
 
 -- | A type of term trees. Each node in the tree contains a value and has an
 --   arbitrary number of children. This type is polymorphic over the type of
@@ -217,5 +236,94 @@ coerceTTermToGTerm :: TTerm node var -> GTerm node var
 coerceTTermToGTerm (MkVarTerm  var)     = MkVarTerm var
 coerceTTermToGTerm (MkNodeTerm node cs) = Vector.map coerceTTermToGTerm cs
                                           |> MkNodeTerm node
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+genTTerm
+  :: forall m node var.
+     (HH.MonadGen m)
+  => Int
+  -- ^ FIXME: doc
+  -> Set var
+  -- ^ FIXME: doc
+  -> (Int -> m (node, Int))
+  -- ^ Given an 'Int' representing the maximum arity of the function symbol,
+  --   return a generator for a function symbol and its arity.
+  -> m (TTerm node var)
+  -- ^ FIXME: doc
+genTTerm depth vars genNode = do
+  let varList = Set.toList vars
+
+  let genConstant :: m (TTerm node var)
+      genConstant = do
+        (label, 0) <- genNode 0
+        pure (MkNodeTerm label mempty)
+
+  let genVar :: m (TTerm node var)
+      genVar = do
+        Gen.choice (map (MkVarTerm .> pure) varList)
+
+  let go :: Int -> m (TTerm node var)
+      go n | (n <= 1) = do
+               Gen.choice [genConstant, genVar]
+           | otherwise = do
+               Gen.choice
+                 [ go 0
+                 , do (label, k) <- genNode maxBound
+                      children <- Vector.replicateM k (go (n `div` k))
+                      pure (MkNodeTerm label children)
+                 ]
+
+  go depth
+
+-- | FIXME: doc
+genGTerm
+  :: forall m node var.
+     (HH.MonadGen m)
+  => Int
+  -- ^ FIXME: doc
+  -> Set var
+  -- ^ FIXME: doc
+  -> (Int -> m (node, Int, Set Int))
+  -- ^ Given an 'Int' representing the maximum arity of the function symbol,
+  --   return a generator for a function symbol, its arity, and the set of
+  --   children indices (0-indexed) that can refer back to this node.
+  -> m (GTerm node var)
+  -- ^ FIXME: doc
+genGTerm depth vars genNode = do
+  let varList = Set.toList vars
+
+  let genConstant :: m (GTerm node var)
+      genConstant = do
+        (label, _, _) <- genNode 0
+        pure (MkNodeTerm label mempty)
+
+  let genVar :: m (GTerm node var)
+      genVar = do
+        Gen.choice (map (MkVarTerm .> pure) varList)
+
+  let genRef :: Set Int -> m (GTerm node var)
+      genRef rs = do
+        r <- unsafeRefine <$> Gen.element (Set.toList rs)
+        pure (MkRefTerm r)
+
+  let go :: Int -> Set Int -> m (GTerm node var)
+      go n rs
+        | (n <= 1) = do
+            Gen.choice [genConstant, genVar, genRef rs]
+        | otherwise = do
+            Gen.choice
+              [ go 0 rs
+              , do (label, k, referables) <- genNode maxBound
+                   children <- forM [0 .. k - 1] $ \i -> do
+                     go (n `div` k)
+                        (Set.map succ (if i `Set.member` referables
+                                       then Set.insert 0 rs
+                                       else rs))
+                   pure (MkNodeTerm label (Vector.fromList children))
+              ]
+
+  go depth Set.empty
 
 --------------------------------------------------------------------------------
