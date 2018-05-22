@@ -90,6 +90,7 @@ library
                         , EqSat.Domain
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
+                        , EqSat.Substitution
                         , EqSat.TermIndex
                         , EqSat.TermIndex.Class
                         , EqSat.TermIndex.DiscriminationNet

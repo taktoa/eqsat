@@ -6,8 +6,7 @@
 
 -- | FIXME: doc
 module EqSat.TypedTerm
-  ( Substitution
-  , TypedTerm
+  ( TypedTerm
   , TypedGTerm
   , TypedTTerm
   , makeTypedTerm
@@ -19,28 +18,20 @@ module EqSat.TypedTerm
 
 --------------------------------------------------------------------------------
 
-import           Control.Monad (guard)
-import           Data.Maybe    (isJust)
+import           Control.Monad      (guard)
+import           Data.Maybe         (isJust)
 
-import           GHC.Generics  (Generic)
+import           GHC.Generics       (Generic)
 
-import           Flow          ((.>))
+import           Flow               ((.>))
 
-import           Data.Set      (Set)
-import qualified Data.Set      as Set
+import           Data.Set           (Set)
+import qualified Data.Set           as Set
 
-import           EqSat.Term    (Term)
-import qualified EqSat.Term    as Term
+import           EqSat.Substitution (Substitution)
 
---------------------------------------------------------------------------------
-
--- | A substitution is basically a partial function.
---
---   We use a function type rather than a 'HashMap' or 'Map' because we want to
---   allow users to use whatever dictionary type makes sense for their
---   application, as long as it supports lookup.
-type Substitution a b
-  = a -> Maybe b
+import           EqSat.Term         (Term)
+import qualified EqSat.Term         as Term
 
 --------------------------------------------------------------------------------
 

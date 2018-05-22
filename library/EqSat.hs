@@ -115,7 +115,7 @@ import           EqSat.Term
 import qualified EqSat.Term                      as Term
 
 import           EqSat.TypedTerm
-                 (Substitution, TypedGTerm, TypedTTerm, TypedTerm)
+                 (TypedGTerm, TypedTTerm, TypedTerm)
 import qualified EqSat.TypedTerm                 as TypedTerm
 
 import           EqSat.Equation                  (Equation)
