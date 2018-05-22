@@ -20,7 +20,7 @@ module EqSat.TermIndex.Class
 --------------------------------------------------------------------------------
 
 import           Control.Arrow           (second)
-import           Control.Monad           (mapM_)
+import           Control.Monad           (mapM_, (>=>))
 
 import           Control.Monad.Primitive (PrimMonad (PrimState), RealWorld)
 import           Control.Monad.ST.Strict (ST, runST)
@@ -551,6 +551,110 @@ class (TermIndex index) => Mergeable index where
     indices <- Vector.mapM freeze indicesMut
     mergeMany indices comb >>= unsafeThaw
   {-# INLINE mergeManyMut #-}
+
+--------------------------------------------------------------------------------
+
+-- |
+-- A typeclass for term indices that can have inserted terms removed.
+--
+-- Laws:
+--
+-- 1. @'remove' i t cb ≡ 'removeMany' i ('BV.singleton' (t, cb))@.
+-- 2. @'removeMut' i t cb ≡ 'removeManyMut' i ('BV.singleton' (t, cb))@.
+-- 3. @'removeMany' i ps ≡ 'BV.foldr' ('>=>') 'pure' ('BV.map' (\\(t, cb) i -> 'remove' i t cb) ps) i@.
+-- 4. @'removeManyMut' i ps ≡ 'BV.mapM_' ('uncurry' ('removeMut' i)) ps@.
+class (TermIndex index) => Removeable index where
+  {-# MINIMAL (remove | removeMany), (removeMut | removeManyMut) #-}
+
+  -- |
+  -- Remove the given term from the given immutable term index.
+  -- The given monadic callback will be called in arbitrary order on each value
+  -- that has been associated with the given term in the given term index.
+  remove
+    :: (Monad m, Key node var)
+    => index node var value
+    -- ^ An immutable term index.
+    -> TTerm node var
+    -- ^ A term to remove from the given immutable term index.
+    -> (value -> m any)
+    -- ^ A callback that can access the value associated with this term before
+    --   it is deleted (it will be called once for each value).
+    -> m (index node var value)
+    -- ^ A monadic action resulting from the sequencing (in arbitrary order) of
+    --   the monadic actions returned by the given callback, when called on each
+    --   value associated with the given term. It returns a version of the
+    --   immutable term index that does not contain the given term.
+  remove index term callback = do
+    removeMany index (BV.singleton (term, callback))
+  {-# INLINE remove #-}
+
+  -- |
+  -- Given a list of terms and monadic callbacks, remove each term from the
+  -- given immutable term index and call the monadic callback on each value
+  -- that has been associated with the term in the given term index.
+  removeMany
+    :: (Monad m, Key node var)
+    => index node var value
+    -- ^ An immutable term index.
+    -> BV.Vector (TTerm node var, value -> m any)
+    -- ^ A 'BV.Vector' of pairs of terms and callbacks. Each term will be
+    --   removed from the given immutable term index, and any values associated
+    --   with that term will be given to the callback.
+    -> m (index node var value)
+    -- ^ A monadic action resulting from the sequencing (in arbitrary order) of
+    --   the monadic actions returned by the given callback, when called on each
+    --   value associated with the given term. It returns a version of the
+    --   immutable term index that does not contain the given term.
+  removeMany index pairs = do
+    let composeKleisli :: (Monad m) => BV.Vector (a -> m a) -> a -> m a
+        composeKleisli = BV.foldr (>=>) pure
+    BV.map (\(t, cb) i -> remove i t cb) pairs
+      |> composeKleisli
+      |> (\f -> f index)
+  {-# INLINE removeMany #-}
+
+  -- |
+  -- Remove the given term from the given mutable term index.
+  -- The given monadic callback will be called in arbitrary order on each value
+  -- that has been associated with the given term in the given term index.
+  removeMut
+    :: (PrimMonad m, Key node var)
+    => Mut index node var value (PrimState m)
+    -- ^ A mutable term index.
+    -> TTerm node var
+    -- ^ A term to remove from the given mutable term index.
+    -> (value -> m any)
+    -- ^ A callback that can access the value associated with this term before
+    --   it is deleted (it will be called once for each value).
+    -> m ()
+    -- ^ A 'PrimMonad' action that will mutate the given mutable term index so
+    --   that it no longer contains the given term. Additionally, any values
+    --   associated with this term will have the given callback called on them.
+  removeMut indexMut term callback = do
+    removeManyMut indexMut (BV.singleton (term, callback))
+  {-# INLINE removeMut #-}
+
+  -- |
+  -- Given a list of terms and monadic callbacks, remove each term from the
+  -- given mutable term index and call the monadic callback on each value
+  -- that has been associated with the term in the given term index.
+  removeManyMut
+    :: (PrimMonad m, Key node var)
+    => Mut index node var value (PrimState m)
+    -- ^ A mutable term index.
+    -> BV.Vector (TTerm node var, value -> m any)
+    -- ^ A 'BV.Vector' of pairs of terms and callbacks. Each term will be
+    --   removed from the given mutable term index, and any values associated
+    --   with that term will be given to the callback.
+    -> m ()
+    -- ^ A 'PrimMonad' action that will mutate the given mutable term index so
+    --   that it no longer contains any of the terms in the given 'BV.Vector'.
+    --   Additionally, for each term-callback pair in the given 'BV.Vector',
+    --   any values associated with the term will have the callback called on
+    --   them.
+  removeManyMut indexMut pairs = do
+    BV.mapM_ (uncurry (removeMut indexMut)) pairs
+  {-# INLINE removeManyMut #-}
 
 --------------------------------------------------------------------------------
 
