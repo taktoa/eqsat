@@ -485,7 +485,7 @@ queryAndCollectManyMut mindex terms = do
 --
 -- FIXME: doc
 class (TermIndex index) => Mergeable index where
-  {-# MINIMAL (merge | mergeMany) #-}
+  {-# MINIMAL merge | mergeMany #-}
 
   -- | FIXME: doc
   merge
@@ -564,7 +564,11 @@ class (TermIndex index) => Mergeable index where
 -- 3. @'removeMany' i ps ≡ 'BV.foldr' ('>=>') 'pure' ('BV.map' (\\(t, cb) i -> 'remove' i t cb) ps) i@.
 -- 4. @'removeManyMut' i ps ≡ 'BV.mapM_' ('uncurry' ('removeMut' i)) ps@.
 class (TermIndex index) => Removeable index where
-  {-# MINIMAL (remove | removeMany), (removeMut | removeManyMut) #-}
+  -- Use definition below once https://github.com/haskell/haddock/issues/834
+  -- is fixed and we are on a version of Haddock with the fix:
+  -- {-# MINIMAL (remove | removeMany), (removeMut | removeManyMut) #-}
+  {-# MINIMAL   remove,     (removeMut | removeManyMut)
+              | removeMany, (removeMut | removeManyMut) #-}
 
   -- |
   -- Remove the given term from the given immutable term index.
