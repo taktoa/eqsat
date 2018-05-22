@@ -504,18 +504,15 @@ class (TermIndex index) => Mergeable index where
 
   -- | FIXME: doc
   mergeMany
-    :: ( Monad m, Key node var
-       , Vector vec (index node var value)
-       , Vector vec (Mut index node var value (PrimState m))
-       )
-    => vec (index node var value)
+    :: (Monad m, Key node var)
+    => BV.Vector (index node var value)
     -- ^ FIXME: doc
     -> (value -> value -> m value)
     -- ^ FIXME: doc
     -> m (index node var value)
     -- ^ FIXME: doc
   mergeMany indices comb = do
-    Vector.foldr (\x my -> my >>= \y -> merge x y comb) new indices
+    BV.foldr (\x my -> my >>= \y -> merge x y comb) new indices
   {-# INLINE mergeMany #-}
 
   -- | FIXME: doc
@@ -537,18 +534,15 @@ class (TermIndex index) => Mergeable index where
 
   -- | FIXME: doc
   mergeManyMut
-    :: ( PrimMonad m, Key node var
-       , Vector vec (index node var value)
-       , Vector vec (Mut index node var value (PrimState m))
-       )
-    => vec (Mut index node var value (PrimState m))
+    :: (PrimMonad m, Key node var)
+    => BV.Vector (Mut index node var value (PrimState m))
     -- ^ FIXME: doc
     -> (value -> value -> m value)
     -- ^ FIXME: doc
     -> m (Mut index node var value (PrimState m))
     -- ^ FIXME: doc
   mergeManyMut indicesMut comb = do
-    indices <- Vector.mapM freeze indicesMut
+    indices <- BV.mapM freeze indicesMut
     mergeMany indices comb >>= unsafeThaw
   {-# INLINE mergeManyMut #-}
 
@@ -565,7 +559,7 @@ class (TermIndex index) => Mergeable index where
 -- 4. @'removeManyMut' i ps ≡ 'BV.mapM_' ('uncurry' ('removeMut' i)) ps@.
 class (TermIndex index) => Removeable index where
   -- Use definition below once https://github.com/haskell/haddock/issues/834
-  -- is fixed and we are on a version of Haddock with the fix:
+  -- is fixed and we are on a version of GHC / Haddock with the fix:
   -- {-# MINIMAL (remove | removeMany), (removeMut | removeManyMut) #-}
   {-# MINIMAL   remove,     (removeMut | removeManyMut)
               | removeMany, (removeMut | removeManyMut) #-}
