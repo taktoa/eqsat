@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DataKinds              #-}
 {-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE InstanceSigs           #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
@@ -28,6 +29,9 @@ import           Control.Monad.ST.Strict (ST, runST)
 import           Data.Hashable           (Hashable)
 import           Data.Kind               (Type)
 
+import           Data.HashMap.Strict     (HashMap)
+import qualified Data.HashMap.Strict     as HashMap
+
 import           Data.Vector.Generic     (Vector)
 import qualified Data.Vector.Generic     as Vector
 
@@ -41,6 +45,9 @@ import           Data.Vector.Storable    (Storable)
 import           Data.Vector.Unboxed     (Unbox)
 
 import           Flow                    ((.>), (|>))
+
+import           EqSat.Internal.MHashMap (MHashMap)
+import qualified EqSat.Internal.MHashMap as MHashMap
 
 import qualified EqSat.Internal.MStack   as MStack
 
@@ -67,6 +74,11 @@ data EquationalAxiom
 
 -- | FIXME: doc
 type Set a = [a]
+
+--------------------------------------------------------------------------------
+
+-- | FIXME: doc
+type Key node var = (Ord node, Hashable node, Ord var, Hashable var)
 
 --------------------------------------------------------------------------------
 
@@ -228,7 +240,7 @@ class TermIndex (index :: Type -- the @node@ type
   -- (in fact, I suspect that in almost all cases an 'Applicative' constraint
   -- would be sufficient).
   query
-    :: (Monad m, Ord node, Hashable node, Ord var, Hashable var)
+    :: (Monad m, Key node var)
     => index node var value
     -- ^ FIXME: doc
     -> TTerm node var
@@ -481,6 +493,35 @@ queryAndCollectManyMut mindex terms = do
 --------------------------------------------------------------------------------
 
 -- |
+-- A /perfect/ term index.
+--
+-- FIXME: doc
+class (TermIndex index) => Perfect index where
+  {-# MINIMAL retrieve, retrieveMut #-}
+
+  -- | FIXME: doc
+  retrieve
+    :: (Key node var)
+    => index node var value
+    -- ^ FIXME: doc
+    -> TTerm node var
+    -- ^ FIXME: doc
+    -> Maybe value
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  retrieveMut
+    :: (PrimMonad m, Key node var)
+    => Mut index node var value (PrimState m)
+    -- ^ FIXME: doc
+    -> TTerm node var
+    -- ^ FIXME: doc
+    -> m (Maybe value)
+    -- ^ FIXME: doc
+
+--------------------------------------------------------------------------------
+
+-- |
 -- A /mergeable/ term index.
 --
 -- FIXME: doc
@@ -657,6 +698,70 @@ class (TermIndex index) => Removeable index where
 --------------------------------------------------------------------------------
 
 -- | FIXME: doc
-type Key node var = (Ord node, Hashable node, Ord var, Hashable var)
+newtype TrivialIndex node var value
+  = MkTrivialIndex (HashMap (TTerm node var) value)
+  deriving ()
+
+-- | FIXME: doc
+newtype MTrivialIndex node var value s
+  = MkMTrivialIndex (MHashMap s (TTerm node var) value)
+  deriving ()
+
+-- | FIXME: doc
+instance TermIndex TrivialIndex where
+  type Mut TrivialIndex node var value s
+    = MTrivialIndex node var value s
+
+  type Theories TrivialIndex
+    = '[ '[] ]
+
+  new
+    :: (Monad m)
+    => m (TrivialIndex node var value)
+  new = undefined -- FIXME
+
+  freeze
+    :: (PrimMonad m)
+    => MTrivialIndex node var value (PrimState m)
+    -> m (TrivialIndex node var value)
+  freeze = undefined -- FIXME
+
+  thaw
+    :: (PrimMonad m)
+    => TrivialIndex node var value
+    -> m (MTrivialIndex node var value (PrimState m))
+  thaw = undefined -- FIXME
+
+  insert
+    :: (PrimMonad m, Key node var)
+    => MTrivialIndex node var value (PrimState m)
+    -> TTerm node var
+    -> value
+    -> m ()
+  insert = undefined -- FIXME
+
+  query
+    :: (Monad m, Key node var)
+    => TrivialIndex node var value
+    -> TTerm node var
+    -> (value -> m any)
+    -> m ()
+  query = undefined -- FIXME
+
+-- | FIXME: doc
+instance Perfect TrivialIndex where
+  retrieve
+    :: (Key node var)
+    => TrivialIndex node var value
+    -> TTerm node var
+    -> Maybe value
+  retrieve = undefined -- FIXME
+
+  retrieveMut
+    :: (PrimMonad m, Key node var)
+    => MTrivialIndex node var value (PrimState m)
+    -> TTerm node var
+    -> m (Maybe value)
+  retrieveMut = undefined -- FIXME
 
 --------------------------------------------------------------------------------
