@@ -29,6 +29,7 @@ import           Data.Hashable           (Hashable)
 import           Data.Kind               (Type)
 
 import           Data.Vector.Generic     (Vector)
+import qualified Data.Vector.Generic     as Vector
 
 import qualified Data.Vector             as BV
 import qualified Data.Vector.Primitive   as PV
@@ -47,31 +48,25 @@ import           EqSat.Term              (TTerm)
 
 --------------------------------------------------------------------------------
 
--- -- | FIXME: doc
--- data EquationalTheory
---   = -- | Syntactic unification.
---     Ø
---   | -- | Unification modulo associativity.
---     A
---   | -- | Unification modulo associativity and unitality.
---     AU
---   | -- | Unification modulo commutativity.
---     C
---   | -- | Unification modulo associativity and commutativity.
---     AC
---   | -- | Unification modulo associativity and commutativity and unitality.
---     ACU
---   | -- | Unification modulo idempotency.
---     I
---   | -- | Unification modulo commutativity and idempotency.
---     CI
---   | -- | Unification modulo associativity and commutativity and idempotency.
---     ACI
---   | -- | Unification modulo the axioms of a boolean ring.
---     BR
---   | -- | Unification modulo the axioms of an abelian group.
---     AG
---   deriving (Eq, Show, Read)
+-- | FIXME: doc
+data EquationalAxiom
+  = -- | Associativity: @∀x, y, z . f(x, f(y, z)) = f(f(x, y), z)@
+    Associativity
+  | -- | Left unitality: @∃e . ∀x . f(e, x) = x@
+    LUnitality
+  | -- | Right unitality: @∃e . ∀x . f(x, e) = x@
+    RUnitality
+  | -- | Commutativity: @∀x, y . f(x, y) = f(y, x)@
+    Commutativity
+  | -- | Idempotency: @∀x . f(x, x) = x@
+    Idempotency
+  | -- | Invertibility:
+    --   left/right unitality + @∃i . ∀x . f(i(x), x) = f(x, i(x)) = e@
+    Invertibility
+  deriving (Eq, Show, Read)
+
+-- | FIXME: doc
+type Set a = [a]
 
 --------------------------------------------------------------------------------
 
@@ -96,6 +91,7 @@ class TermIndex (index :: Type -- the @node@ type
                        -> Type -- the @value@ type
                        -> Type -- the index
                 ) where
+  {-# MINIMAL new, freeze, thaw, (insert | insertMany), (query | queryMany) #-}
 
   -- |
   -- An injective type family defining the mutable version of an immutable
@@ -103,12 +99,23 @@ class TermIndex (index :: Type -- the @node@ type
   -- phantom type.
   type Mut index (node :: Type) (var :: Type) (value :: Type) (s :: Type)
     = (result :: Type)
-    | result -> index
+    | result -> index node var value s
 
-  -- -- | FIXME: doc
-  -- type Theories index :: [EquationalTheory]
+  -- | FIXME: doc
+  type Theories index :: Set (Set EquationalAxiom)
 
-  {-# MINIMAL freeze, thaw, (insert | insertMany), (query | queryMany) #-}
+  -- | FIXME: doc
+  new
+    :: (Monad m)
+    => m (index node var value)
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  newMut
+    :: (PrimMonad m)
+    => m (Mut index node var value (PrimState m))
+    -- ^ FIXME: doc
+  newMut = new >>= thaw
 
   -- | Freeze a mutable @'Mut' index@ into an immutable @index@.
   freeze
@@ -137,7 +144,8 @@ class TermIndex (index :: Type -- the @node@ type
     => Mut index node var value (PrimState m)
     -- ^ A mutable term index.
     -> m (index node var value)
-    -- ^ A 'PrimMonad' instance
+    -- ^ A 'PrimMonad' action returning an immutable term index equivalent to
+    --   the given mutable term index.
   unsafeFreeze = freeze
   {-# INLINE unsafeFreeze #-}
 
@@ -150,7 +158,7 @@ class TermIndex (index :: Type -- the @node@ type
   unsafeThaw
     :: (PrimMonad m)
     => index node var value
-    -- ^ FIXME: doc
+    -- ^ An immutable term index
     -> m (Mut index node var value (PrimState m))
     -- ^ FIXME: doc
   unsafeThaw = thaw
@@ -469,6 +477,80 @@ queryAndCollectManyMut mindex terms = do
     pure (term, stack)
   queryManyMut mindex (BV.map (second MStack.push) termStackPairs)
   BV.forM termStackPairs (snd .> MStack.freeze)
+
+--------------------------------------------------------------------------------
+
+-- |
+-- A /mergeable/ term index.
+--
+-- FIXME: doc
+class (TermIndex index) => Mergeable index where
+  {-# MINIMAL (merge | mergeMany) #-}
+
+  -- | FIXME: doc
+  merge
+    :: (Monad m, Key node var)
+    => index node var value
+    -- ^ FIXME: doc
+    -> index node var value
+    -- ^ FIXME: doc
+    -> (value -> value -> m value)
+    -- ^ FIXME: doc
+    -> m (index node var value)
+    -- ^ FIXME: doc
+  merge left right comb = do
+    mergeMany (BV.fromList [left, right]) comb
+  {-# INLINE merge #-}
+
+  -- | FIXME: doc
+  mergeMany
+    :: ( Monad m, Key node var
+       , Vector vec (index node var value)
+       , Vector vec (Mut index node var value (PrimState m))
+       )
+    => vec (index node var value)
+    -- ^ FIXME: doc
+    -> (value -> value -> m value)
+    -- ^ FIXME: doc
+    -> m (index node var value)
+    -- ^ FIXME: doc
+  mergeMany indices comb = do
+    Vector.foldr (\x my -> my >>= \y -> merge x y comb) new indices
+  {-# INLINE mergeMany #-}
+
+  -- | FIXME: doc
+  mergeMut
+    :: (PrimMonad m, Key node var)
+    => Mut index node var value (PrimState m)
+    -- ^ FIXME: doc
+    -> Mut index node var value (PrimState m)
+    -- ^ FIXME: doc
+    -> (value -> value -> m value)
+    -- ^ FIXME: doc
+    -> m (Mut index node var value (PrimState m))
+    -- ^ FIXME: doc
+  mergeMut leftMut rightMut comb = do
+    left  <- freeze leftMut
+    right <- freeze rightMut
+    merge left right comb >>= unsafeThaw
+  {-# INLINE mergeMut #-}
+
+  -- | FIXME: doc
+  mergeManyMut
+    :: ( PrimMonad m, Key node var
+       , Vector vec (index node var value)
+       , Vector vec (Mut index node var value (PrimState m))
+       )
+    => vec (Mut index node var value (PrimState m))
+    -- ^ FIXME: doc
+    -> (value -> value -> m value)
+    -- ^ FIXME: doc
+    -> m (Mut index node var value (PrimState m))
+    -- ^ FIXME: doc
+  mergeManyMut indicesMut comb = do
+    indices <- Vector.mapM freeze indicesMut
+    mergeMany indices comb >>= unsafeThaw
+  {-# INLINE mergeManyMut #-}
 
 --------------------------------------------------------------------------------
 
