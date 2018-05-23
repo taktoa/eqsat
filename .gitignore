@@ -1,4 +1,4 @@
-/dist/
+dist*
 /cabal-dev/
 /.virtualenv/
 /.hpc/
@@ -29,3 +29,5 @@ tags
 TODO.md
 report.html
 flycheck_*
+*.ghc*
+*.sw*

@@ -39,6 +39,7 @@ module EqSat.Term
 --------------------------------------------------------------------------------
 
 import           Control.Monad          (forM)
+import           Control.Monad.Fail     (MonadFail(fail))
 
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
@@ -242,7 +243,7 @@ coerceTTermToGTerm (MkNodeTerm node cs) = Vector.map coerceTTermToGTerm cs
 -- | FIXME: doc
 genTTerm
   :: forall m node var.
-     (HH.MonadGen m)
+     (HH.MonadGen m, MonadFail m)
   => Int
   -- ^ FIXME: doc
   -> Set var
