@@ -149,7 +149,7 @@ insert (MkMHashSet hm) k = MHashMap.insert hm k ()
 -- | FIXME: doc
 mapM_
   :: (PrimMonad m)
-  => (k -> m any)
+  => (k -> m void)
   -- ^ FIXME: doc
   -> MHashSet (PrimState m) k
   -- ^ FIXME: doc
@@ -162,7 +162,7 @@ forM_
   :: (PrimMonad m)
   => MHashSet (PrimState m) k
   -- ^ FIXME: doc
-  -> (k -> m any)
+  -> (k -> m void)
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc

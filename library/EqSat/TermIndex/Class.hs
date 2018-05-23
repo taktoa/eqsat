@@ -247,7 +247,7 @@ class TermIndex (index :: Type -- the @node@ type
     -- ^ FIXME: doc
     -> TTerm node var
     -- ^ FIXME: doc
-    -> (value -> m any)
+    -> (value -> m void)
     -- ^ FIXME: doc
     -> m ()
     -- ^ FIXME: doc
@@ -266,7 +266,7 @@ class TermIndex (index :: Type -- the @node@ type
     -- ^ FIXME: doc
     -> TTerm node var
     -- ^ FIXME: doc
-    -> (value -> m any)
+    -> (value -> m void)
     -- ^ FIXME: doc
     -> m ()
     -- ^ FIXME: doc
@@ -289,7 +289,7 @@ class TermIndex (index :: Type -- the @node@ type
     :: (Monad m, Key node var)
     => index node var value
     -- ^ FIXME: doc
-    -> BV.Vector (TTerm node var, value -> m any)
+    -> BV.Vector (TTerm node var, value -> m void)
     -- ^ FIXME: doc
     -> m ()
     -- ^ FIXME: doc
@@ -302,7 +302,7 @@ class TermIndex (index :: Type -- the @node@ type
     :: (PrimMonad m, Key node var)
     => Mut index node var value (PrimState m)
     -- ^ FIXME: doc
-    -> BV.Vector (TTerm node var, value -> m any)
+    -> BV.Vector (TTerm node var, value -> m void)
     -- ^ FIXME: doc
     -> m ()
     -- ^ FIXME: doc
@@ -596,7 +596,7 @@ class (TermIndex index) => Removeable index where
     -- ^ An immutable term index.
     -> TTerm node var
     -- ^ A term to remove from the given immutable term index.
-    -> (value -> m any)
+    -> (value -> m void)
     -- ^ A callback that can access the value associated with this term before
     --   it is deleted (it will be called once for each value).
     -> m (index node var value)
@@ -616,7 +616,7 @@ class (TermIndex index) => Removeable index where
     :: (Monad m, Key node var)
     => index node var value
     -- ^ An immutable term index.
-    -> BV.Vector (TTerm node var, value -> m any)
+    -> BV.Vector (TTerm node var, value -> m void)
     -- ^ A 'BV.Vector' of pairs of terms and callbacks. Each term will be
     --   removed from the given immutable term index, and any values associated
     --   with that term will be given to the callback.
@@ -643,7 +643,7 @@ class (TermIndex index) => Removeable index where
     -- ^ A mutable term index.
     -> TTerm node var
     -- ^ A term to remove from the given mutable term index.
-    -> (value -> m any)
+    -> (value -> m void)
     -- ^ A callback that can access the value associated with this term before
     --   it is deleted (it will be called once for each value).
     -> m ()
@@ -662,7 +662,7 @@ class (TermIndex index) => Removeable index where
     :: (PrimMonad m, Key node var)
     => Mut index node var value (PrimState m)
     -- ^ A mutable term index.
-    -> BV.Vector (TTerm node var, value -> m any)
+    -> BV.Vector (TTerm node var, value -> m void)
     -- ^ A 'BV.Vector' of pairs of terms and callbacks. Each term will be
     --   removed from the given mutable term index, and any values associated
     --   with that term will be given to the callback.
@@ -730,7 +730,7 @@ instance TermIndex TrivialIndex where
     :: (Monad m, Key node var)
     => TrivialIndex node var value
     -> TTerm node var
-    -> (value -> m any)
+    -> (value -> m void)
     -> m ()
   query (MkTrivialIndex hm) term cb = do
     case HashMap.lookup term hm of

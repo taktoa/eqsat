@@ -176,7 +176,7 @@ insertWith (mhm@(UnsafeMkMHashMap _ hm)) k v combiner = do
 -- | FIXME: doc
 mapM_
   :: (PrimMonad m)
-  => (k -> v -> m any)
+  => (k -> v -> m void)
   -- ^ FIXME: doc
   -> MHashMap (PrimState m) k v
   -- ^ FIXME: doc
@@ -189,7 +189,7 @@ forM_
   :: (PrimMonad m)
   => MHashMap (PrimState m) k v
   -- ^ FIXME: doc
-  -> (k -> v -> m any)
+  -> (k -> v -> m void)
   -- ^ FIXME: doc
   -> m ()
   -- ^ FIXME: doc
