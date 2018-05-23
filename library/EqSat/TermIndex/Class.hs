@@ -21,10 +21,12 @@ module EqSat.TermIndex.Class
 --------------------------------------------------------------------------------
 
 import           Control.Arrow           (second)
-import           Control.Monad           (mapM_, (>=>))
+import           Control.Monad           (mapM_, void, (>=>))
 
 import           Control.Monad.Primitive (PrimMonad (PrimState), RealWorld)
 import           Control.Monad.ST.Strict (ST, runST)
+
+import           Data.Coerce             (coerce)
 
 import           Data.Hashable           (Hashable)
 import           Data.Kind               (Type)
@@ -118,20 +120,20 @@ class TermIndex (index :: Type -- the @node@ type
 
   -- | FIXME: doc
   new
-    :: (Monad m)
+    :: (Monad m, Key node var)
     => m (index node var value)
     -- ^ FIXME: doc
 
   -- | FIXME: doc
   newMut
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => m (Mut index node var value (PrimState m))
     -- ^ FIXME: doc
   newMut = new >>= thaw
 
   -- | Freeze a mutable @'Mut' index@ into an immutable @index@.
   freeze
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => Mut index node var value (PrimState m)
     -- ^ A mutable term index.
     -> m (index node var value)
@@ -139,7 +141,7 @@ class TermIndex (index :: Type -- the @node@ type
 
   -- | Thaw an immutable @index@ into a mutable @'Mut' index@.
   thaw
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => index node var value
     -- ^ FIXME: doc
     -> m (Mut index node var value (PrimState m))
@@ -152,7 +154,7 @@ class TermIndex (index :: Type -- the @node@ type
   -- exactly one reference in the current heap (if we had linear types,
   -- this would be a linear function).
   unsafeFreeze
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => Mut index node var value (PrimState m)
     -- ^ A mutable term index.
     -> m (index node var value)
@@ -168,7 +170,7 @@ class TermIndex (index :: Type -- the @node@ type
   -- exactly one reference in the current heap (if we had linear types,
   -- this would be a linear function).
   unsafeThaw
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => index node var value
     -- ^ An immutable term index
     -> m (Mut index node var value (PrimState m))
@@ -496,28 +498,7 @@ queryAndCollectManyMut mindex terms = do
 -- A /perfect/ term index.
 --
 -- FIXME: doc
-class (TermIndex index) => Perfect index where
-  {-# MINIMAL retrieve, retrieveMut #-}
-
-  -- | FIXME: doc
-  retrieve
-    :: (Key node var)
-    => index node var value
-    -- ^ FIXME: doc
-    -> TTerm node var
-    -- ^ FIXME: doc
-    -> Maybe value
-    -- ^ FIXME: doc
-
-  -- | FIXME: doc
-  retrieveMut
-    :: (PrimMonad m, Key node var)
-    => Mut index node var value (PrimState m)
-    -- ^ FIXME: doc
-    -> TTerm node var
-    -- ^ FIXME: doc
-    -> m (Maybe value)
-    -- ^ FIXME: doc
+class (TermIndex index) => Perfect index
 
 --------------------------------------------------------------------------------
 
@@ -699,12 +680,12 @@ class (TermIndex index) => Removeable index where
 
 -- | FIXME: doc
 newtype TrivialIndex node var value
-  = MkTrivialIndex (HashMap (TTerm node var) value)
+  = MkTrivialIndex (HashMap (TTerm node var) (BV.Vector value))
   deriving ()
 
 -- | FIXME: doc
 newtype MTrivialIndex node var value s
-  = MkMTrivialIndex (MHashMap s (TTerm node var) value)
+  = MkMTrivialIndex (MHashMap s (TTerm node var) (BV.Vector value))
   deriving ()
 
 -- | FIXME: doc
@@ -716,21 +697,25 @@ instance TermIndex TrivialIndex where
     = '[ '[] ]
 
   new
-    :: (Monad m)
+    :: (Monad m, Key node var)
     => m (TrivialIndex node var value)
-  new = undefined -- FIXME
+  new = pure (MkTrivialIndex HashMap.empty)
 
   freeze
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => MTrivialIndex node var value (PrimState m)
     -> m (TrivialIndex node var value)
-  freeze = undefined -- FIXME
+  freeze (MkMTrivialIndex mhm) = do
+    hm <- MHashMap.freeze mhm
+    pure (MkTrivialIndex hm)
 
   thaw
-    :: (PrimMonad m)
+    :: (PrimMonad m, Key node var)
     => TrivialIndex node var value
     -> m (MTrivialIndex node var value (PrimState m))
-  thaw = undefined -- FIXME
+  thaw (MkTrivialIndex hm) = do
+    mhm <- MHashMap.thaw hm
+    pure (MkMTrivialIndex mhm)
 
   insert
     :: (PrimMonad m, Key node var)
@@ -738,7 +723,8 @@ instance TermIndex TrivialIndex where
     -> TTerm node var
     -> value
     -> m ()
-  insert = undefined -- FIXME
+  insert (MkMTrivialIndex mhm) term value = do
+    undefined -- FIXME
 
   query
     :: (Monad m, Key node var)
@@ -746,22 +732,12 @@ instance TermIndex TrivialIndex where
     -> TTerm node var
     -> (value -> m any)
     -> m ()
-  query = undefined -- FIXME
+  query (MkTrivialIndex hm) term cb = do
+    case HashMap.lookup term hm of
+      Just values -> Vector.mapM_ cb values
+      Nothing     -> pure ()
 
 -- | FIXME: doc
-instance Perfect TrivialIndex where
-  retrieve
-    :: (Key node var)
-    => TrivialIndex node var value
-    -> TTerm node var
-    -> Maybe value
-  retrieve = undefined -- FIXME
-
-  retrieveMut
-    :: (PrimMonad m, Key node var)
-    => MTrivialIndex node var value (PrimState m)
-    -> TTerm node var
-    -> m (Maybe value)
-  retrieveMut = undefined -- FIXME
+instance Perfect TrivialIndex
 
 --------------------------------------------------------------------------------
