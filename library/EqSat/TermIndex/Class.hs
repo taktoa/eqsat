@@ -498,7 +498,31 @@ queryAndCollectManyMut mindex terms = do
 -- A /perfect/ term index.
 --
 -- FIXME: doc
-class (TermIndex index) => Perfect index
+class (TermIndex index) => Perfect index where
+  {-# MINIMAL forIndex #-}
+
+  -- | FIXME: doc
+  forIndex
+    :: (Monad m, Key node var)
+    => index node var value
+    -- ^ FIXME: doc
+    -> (TTerm node var -> value -> m void)
+    -- ^ FIXME: doc
+    -> m ()
+    -- ^ FIXME: doc
+
+  -- | FIXME: doc
+  forIndexMut
+    :: (PrimMonad m, Key node var)
+    => Mut index node var value (PrimState m)
+    -- ^ FIXME: doc
+    -> (TTerm node var -> value -> m void)
+    -- ^ FIXME: doc
+    -> m ()
+    -- ^ FIXME: doc
+  forIndexMut mindex cb = do
+    index <- freeze mindex
+    forIndex index cb
 
 --------------------------------------------------------------------------------
 
@@ -507,66 +531,48 @@ class (TermIndex index) => Perfect index
 --
 -- FIXME: doc
 class (TermIndex index) => Mergeable index where
-  {-# MINIMAL merge | mergeMany #-}
+  {-# MINIMAL append | appendMut #-}
 
   -- | FIXME: doc
   merge
-    :: (Monad m, Key node var)
-    => index node var value
+    :: (Key node var)
+    => BV.Vector (index node var value)
     -- ^ FIXME: doc
     -> index node var value
     -- ^ FIXME: doc
-    -> (value -> value -> m value)
-    -- ^ FIXME: doc
-    -> m (index node var value)
-    -- ^ FIXME: doc
-  merge left right comb = do
-    mergeMany (BV.fromList [left, right]) comb
+  merge indices = runST $ do
+    if BV.null indices
+      then new
+      else do i <- thaw (BV.head indices)
+              append i (BV.tail indices)
+              freeze i
   {-# INLINE merge #-}
 
   -- | FIXME: doc
-  mergeMany
-    :: (Monad m, Key node var)
-    => BV.Vector (index node var value)
-    -- ^ FIXME: doc
-    -> (value -> value -> m value)
-    -- ^ FIXME: doc
-    -> m (index node var value)
-    -- ^ FIXME: doc
-  mergeMany indices comb = do
-    BV.foldr (\x my -> my >>= \y -> merge x y comb) new indices
-  {-# INLINE mergeMany #-}
-
-  -- | FIXME: doc
-  mergeMut
+  append
     :: (PrimMonad m, Key node var)
     => Mut index node var value (PrimState m)
     -- ^ FIXME: doc
-    -> Mut index node var value (PrimState m)
+    -> BV.Vector (index node var value)
     -- ^ FIXME: doc
-    -> (value -> value -> m value)
+    -> m ()
     -- ^ FIXME: doc
-    -> m (Mut index node var value (PrimState m))
-    -- ^ FIXME: doc
-  mergeMut leftMut rightMut comb = do
-    left  <- freeze leftMut
-    right <- freeze rightMut
-    merge left right comb >>= unsafeThaw
-  {-# INLINE mergeMut #-}
+  append mindex indices = do
+    mindices <- BV.mapM thaw indices
+    appendMut mindex mindices
 
   -- | FIXME: doc
-  mergeManyMut
+  appendMut
     :: (PrimMonad m, Key node var)
-    => BV.Vector (Mut index node var value (PrimState m))
+    => Mut index node var value (PrimState m)
     -- ^ FIXME: doc
-    -> (value -> value -> m value)
+    -> BV.Vector (Mut index node var value (PrimState m))
     -- ^ FIXME: doc
-    -> m (Mut index node var value (PrimState m))
+    -> m ()
     -- ^ FIXME: doc
-  mergeManyMut indicesMut comb = do
-    indices <- BV.mapM freeze indicesMut
-    mergeMany indices comb >>= unsafeThaw
-  {-# INLINE mergeManyMut #-}
+  appendMut mindex mindices = do
+    indices <- BV.mapM freeze mindices
+    append mindex indices
 
 --------------------------------------------------------------------------------
 
@@ -738,6 +744,13 @@ instance TermIndex TrivialIndex where
       Nothing     -> pure ()
 
 -- | FIXME: doc
-instance Perfect TrivialIndex
+instance Perfect TrivialIndex where
+  forIndex
+    :: (Monad m, Key node var)
+    => TrivialIndex node var value
+    -> (TTerm node var -> value -> m void)
+    -> m ()
+  forIndex index cb = do
+    undefined -- FIXME
 
 --------------------------------------------------------------------------------
