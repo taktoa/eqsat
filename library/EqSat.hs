@@ -30,6 +30,8 @@ import           Control.Exception
 
 import           Control.Applicative             (empty)
 
+import           Control.Concurrent.MVar         (MVar)
+
 import           Control.Monad
 
 import           Control.Monad.Primitive
@@ -98,6 +100,9 @@ import qualified Data.SBV.Internals              as SBV.Internals
 import qualified EqSat.Internal.SBV
 
 import           Flow                            ((.>), (|>))
+
+import           Streaming
+import qualified Streaming.Prelude               as S
 
 import           GHC.Generics                    (Generic)
 
@@ -861,53 +866,54 @@ saturate
   -- ^ FIXME: doc
   -> EPEG g node
   -- ^ FIXME: doc
-  -> (EPEG g node -> m Bool)
+  -> (EPEG g node -> Stream (Of Bool) m r)
   -- ^ FIXME: doc
-  -> (SomePEG node -> m (Maybe a))
+  -> Stream (Of (SomePEG node, Proof label)) m r
   -- ^ FIXME: doc
-  -> m [a]
-  -- ^ FIXME: doc
-saturate eqs heuristic initial timer callback = do
-  let go epeg soFar = do
-        case saturateStep eqs epeg of
-          Just epeg' -> do let recurse = go epeg'
-                           shouldSelectBest <- timer epeg'
-                           if shouldSelectBest
-                             then selectBest heuristic epeg'
-                                  >>= callback
-                                  >>= \case (Just x) -> recurse (x : soFar)
-                                            Nothing  -> recurse soFar
-                             else recurse soFar
-          Nothing    -> pure soFar
-  go initial []
+saturate eqs heuristic initial timer = do
+  undefined -- FIXME
+--   let go epeg soFar = do
+--         case saturateStep eqs epeg of
+--           Just epeg' -> do let recurse = go epeg'
+--                            shouldSelectBest <- timer epeg'
+--                            if shouldSelectBest
+--                              then selectBest heuristic epeg'
+--                                   >>= callback
+--                                   >>= \case (Just x) -> recurse (x : soFar)
+--                                             Nothing  -> recurse soFar
+--                              else recurse soFar
+--           Nothing    -> pure soFar
+--   go initial []
 
 -- | FIXME: doc
-type LabelledTransitionSystem node var label
+type LabelledTRS node var label
   = Map (Equation node var) label
 
 -- | FIXME: doc
-type TransitionSystem node var
-  = LabelledTransitionSystem node var ()
+type TRS node var
+  = LabelledTRS node var ()
+
+type Proof label = () -- FIXME
 
 -- | The public interface of equality saturation.
 equalitySaturation
-  :: forall label node heuristic expr m a.
+  :: forall label node heuristic expr m r.
      ( IsExpression node expr
      , MonadIO m
      , MonadError SomeException m
      , Heuristic heuristic
      )
-  => LabelledTransitionSystem node Variable label
-  -- ^ A set of optimization axioms.
+  => LabelledTRS node Variable label
+  -- ^ A labelled term-rewriting system containing the optimization axioms.
   -> heuristic node
   -- ^ The performance heuristic to optimize.
   -> expr
   -- ^ The code whose performance will be optimized.
-  -> (forall g. EPEG g node -> m Bool)
+  -> (forall g. MVar (EPEG g node) -> Stream (Of Bool) m r)
   -- ^ A callback that, given the current state of the 'EPEG', will decide
   --   whether we should run 'selectBest' again. In many cases, this will be
   --   some kind of timer.
-  -> (expr -> m (Maybe a))
+  -> Stream (Of (expr, Proof label)) m r
   -- ^ A callback that will be called with the optimized 'Term' every time
   --   'selectBest' has found a new best version of the original program.
   --   The argument is the new best version, and the return value will be
@@ -915,15 +921,13 @@ equalitySaturation
   --   is ever returned by this callback, equality saturation will terminate
   --   early; otherwise it will run for an amount of time that is exponential
   --   in the size of the original program.
-  -> m [a]
-  -- ^ The list of results produced by the second callback, in _reverse_
-  --   chronological order (e.g.: starting with newest and ending with oldest).
-equalitySaturation lts heuristic initial timer cb
-  = let eqs = Map.keysSet lts
-        exprToEPEG = exprToGTerm .> makePEG' .> pegToEPEG
-        pegToExpr (MkSomePEG peg) = case gtermToExpr (pegToTerm peg) of
-                                      Left  exception -> throwError exception
-                                      Right result    -> pure result
-    in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)
+equalitySaturation lts heuristic initial timer
+  = undefined -- FIXME
+--  = let eqs = Map.keysSet lts
+--        exprToEPEG = exprToGTerm .> makePEG' .> pegToEPEG
+--        pegToExpr (MkSomePEG peg) = case gtermToExpr (pegToTerm peg) of
+--                                      Left  exception -> throwError exception
+--                                      Right result    -> pure result
+--    in saturate eqs heuristic (exprToEPEG initial) timer (pegToExpr >=> cb)
 
 --------------------------------------------------------------------------------
