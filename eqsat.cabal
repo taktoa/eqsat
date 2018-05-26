@@ -66,6 +66,7 @@ library
                         , sbv                         >= 7.5   && < 7.7
                         , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
+                        , streaming                   >= 0.2   && < 0.3
                         , system-filepath             >= 0.4   && < 0.5
                         , tasty                       >= 0.11  && < 0.12
                         , tasty-hedgehog              >= 0.1   && < 0.2
@@ -166,6 +167,7 @@ test-suite tests
                         , sbv                         >= 7.5   && < 7.7
                         , serialise                   >= 0.2   && < 0.3
                         , smallcheck                  >= 1.1   && < 1.2
+                        , streaming                   >= 0.2   && < 0.3
                         , system-filepath             >= 0.4   && < 0.5
                         , tasty                       >= 0.11  && < 0.12
                         , tasty-hedgehog              >= 0.1   && < 0.2
