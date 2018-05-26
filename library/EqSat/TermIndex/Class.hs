@@ -846,7 +846,8 @@ instance TermIndex TrivialIndex where
     -> value
     -> m ()
   insert (MkMTrivialIndex mhm) term value = do
-    undefined -- FIXME
+    -- FIXME: this seems potentially slower than just using a list?
+    MHashMap.insertWith mhm term (BV.singleton value) (\a b -> pure (a <> b))
 
   query
     :: (Monad m, Key node var)
@@ -867,7 +868,9 @@ instance Perfect TrivialIndex where
     => TrivialIndex node var value
     -> (TTerm node var -> value -> m void)
     -> m ()
-  forIndex index cb = do
-    undefined -- FIXME
+  forIndex (MkTrivialIndex hm) cb = do
+    HashMap.toList hm
+      |> map (\(term, vals) -> BV.mapM_ (cb term .> void) vals)
+      |> sequence_
 
 --------------------------------------------------------------------------------
