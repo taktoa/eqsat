@@ -15,6 +15,7 @@ module EqSat.TermIndex.SubstitutionTree
 
 import           Control.Arrow          (first, second)
 import           Control.Exception
+import           Control.Monad          (guard)
 import           Data.Coerce            (coerce)
 import           Data.Maybe
 import           Data.Void              (Void, absurd)
@@ -125,17 +126,24 @@ newtype Position
 instance Show Position where
   show (Position xs) = show xs
 
--- instance Ord Position where
---   (<)  p q = let go :: [Int] -> [Int] -> Bool
---                  go []         [] = False
---                  go []      (_:_) = False
---                  go (_:_)      [] = False
---                  go (p:ps) (q:qs) = (p < q) || ((p == q) && go ps qs)
---              in go (fromPosition p) (fromPosition q)
---   (<=) p q = (p == q) || (p < q)
+(≺) :: Position -> Position -> Bool
+(≺) p q = let go :: [Int] -> [Int] -> Bool
+              go []         [] = False
+              go []      (_:_) = False
+              go (_:_)      [] = False
+              go (p:ps) (q:qs) = (p < q) || ((p == q) && go ps qs)
+          in go (fromPosition p) (fromPosition q)
 
 consPosition :: Int -> Position -> Position
 consPosition = coerce ((:) :: Int -> [Int] -> [Int])
+
+indexPosition :: Position -> TTerm node var -> Maybe (TTerm node var)
+indexPosition (Position [])         t = pure t
+indexPosition (Position (i : rest)) t = do
+  (MkNodeTerm node children) <- pure t
+  guard (i >= 0)
+  guard (i < Vector.length children)
+  indexPosition (Position rest) (children ! i)
 
 recursiveSubterms
   :: (Ord node, Ord var)
@@ -144,10 +152,6 @@ recursiveSubterms
 recursiveSubterms (MkVarTerm var)
   = [(Position [], MkVarTerm var)]
 recursiveSubterms (MkNodeTerm node children)
---  = Vector.toList children
---    |> map recursiveSubterms
---    |> ([(Position [], MkNodeTerm node children)] :)
---    |> Map.unionsWith (\_ _ -> error "lmao")
   = Vector.toList children
     |> zip [0 ..]
     |> map (second recursiveSubterms)
@@ -155,16 +159,41 @@ recursiveSubterms (MkNodeTerm node children)
     |> ([(Position [], MkNodeTerm node children)] :)
     |> Map.unionsWith (\_ _ -> error "lmao")
 
+mapSubterms
+  :: (Ord node, Ord var, Monad m)
+  => TTerm node var
+  -> (Position -> TTerm node var -> m ())
+  -> m ()
+mapSubterms term callback
+  = undefined
+
+traverseSubterms
+  :: (Ord node, Ord var, Monad m)
+  => TTerm node var
+  -> (Position -> TTerm node var -> m ())
+  -> m ()
+traverseSubterms term callback
+  = recursiveSubterms term
+    |> Map.toList
+    |> mapM_ (uncurry callback)
+
+normalizeTerm
+  :: TTerm node var
+  -> (TTerm node Int, Vector var)
+normalizeTerm = undefined
+
 --------------------------------------------------------------------------------
 
-type Indicator = Int
+newtype Indicator
+  = Indicator { fromIndicator :: Int }
+  deriving (Eq, Ord, Show)
 
 data SubstitutionTree node var
   = SubstitutionTree
     { substitutionTreeContent  :: !(Substitution node (Either Indicator var))
     , substitutionTreeChildren :: !(Vector (SubstitutionTree node var))
     }
-  deriving ()
+  deriving (Show)
 
 insertTerm
   :: (Ord node, Ord var)
@@ -194,7 +223,7 @@ compositionTest = do
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
                  ]
   let actual   = composition a b
-  assert (expected == actual) (pure ())
+  assert (expected == actual) (putStrLn "SUCCESS")
 
 joinTest :: IO ()
 joinTest = do
@@ -205,7 +234,7 @@ joinTest = do
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
                  ]
   let actual   = join a b
-  assert (expected == actual) (pure ())
+  assert (expected == actual) (putStrLn "SUCCESS")
 
 recursiveSubtermsTest :: IO ()
 recursiveSubtermsTest = do
@@ -222,6 +251,10 @@ recursiveSubtermsTest = do
                  , (Position [2],    MkVarTerm "x")
                  ]
   let actual   = recursiveSubterms a
-  assert (expected == actual) (pure ())
+  assert (expected == actual) (putStrLn "SUCCESS")
+  assert
+    (Map.toList expected
+     |> all (\(p, st) -> Just st == indexPosition p a))
+    (putStrLn "SUCCESS")
 
 --------------------------------------------------------------------------------
