@@ -39,7 +39,7 @@ module EqSat.Term
 --------------------------------------------------------------------------------
 
 import           Control.Monad          (forM)
-import           Control.Monad.Fail     (MonadFail(fail))
+import           Control.Monad.Fail     (MonadFail (fail))
 
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
@@ -106,6 +106,9 @@ deriving instance (Eq node, Eq var) => Eq (Term repr node var)
 
 -- | FIXME: doc
 deriving instance (Ord node, Ord var) => Ord (Term repr node var)
+
+-- | FIXME: doc
+deriving instance (Show node, Show var) => Show (Term repr node var)
 
 -- | FIXME: doc
 type TTerm node var = Term ReprT node var

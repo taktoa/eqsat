@@ -310,10 +310,10 @@ class Trie (t :: * -> * -> *) where
 
 --------------------------------------------------------------------------------
 
-data Children
-  = MkChildren
-    {-# UNPACK #-} !(# Int# , Int# , Int# , Int# #)
-  deriving ()
+-- data Children
+--   = MkChildren
+--     {-# UNPACK #-} !(# Int# , Int# , Int# , Int# #)
+--   deriving ()
 
 data MDiscriminationNet s node var
   = MkMDiscriminationNet
