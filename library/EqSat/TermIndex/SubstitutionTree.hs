@@ -1,8 +1,9 @@
 --------------------------------------------------------------------------------
 
-{-# LANGUAGE LambdaCase       #-}
-{-# LANGUAGE OverloadedLists  #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedLists     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
 
 --------------------------------------------------------------------------------
 
@@ -17,7 +18,9 @@ import           Control.Arrow          (first, second)
 import           Control.Exception
 import           Control.Monad          (guard)
 import           Data.Coerce            (coerce)
+import           Data.List              (sortBy)
 import           Data.Maybe
+import           Data.Ord               (comparing)
 import           Data.Void              (Void, absurd)
 
 -- import qualified Data.Vector.Primitive         as PV
@@ -32,7 +35,7 @@ import qualified Data.Map.Strict        as Map
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
 
-import           Flow
+import           Flow                   ((.>), (|>))
 
 import           EqSat.Term             (TTerm, Term (MkNodeTerm, MkVarTerm))
 import qualified EqSat.Term             as TTerm
@@ -42,40 +45,50 @@ import qualified EqSat.Internal.Refined as Refined
 
 --------------------------------------------------------------------------------
 
-type Substitution node var = Map var (TTerm node var)
+type Substitution node v1 v2 = Map v1 (TTerm node v2)
+
+type Substitution' node var = Substitution node var var
 
 domain
-  :: Substitution node var
-  -> Set var
+  :: Substitution node v1 v2
+  -> Set v1
 domain = Map.keysSet
 
 codomain
-  :: (Ord node, Ord var)
-  => Substitution node var
-  -> Set (TTerm node var)
+  :: (Ord node, Ord v1, Ord v2)
+  => Substitution node v1 v2
+  -> Set (TTerm node v2)
 codomain = Map.toList .> map snd .> Set.fromList
 
 introduced
-  :: (Ord var)
-  => Substitution node var
-  -> Set var
+  :: (Ord v2)
+  => Substitution node v1 v2
+  -> Set v2
 introduced = Map.toList .> map (snd .> TTerm.freeVars) .> mconcat
 
 substitute
-  :: (Ord var)
-  => Substitution node var
-  -> TTerm node var
-  -> TTerm node var
-substitute s (MkVarTerm var)
+  :: (Ord v1)
+  => Substitution node v1 v2
+  -> (v1 -> v2)
+  -> TTerm node v1
+  -> TTerm node v2
+substitute s def (MkVarTerm var)
   = case Map.lookup var s of
-      Nothing     -> MkVarTerm var
+      Nothing     -> MkVarTerm (def var)
       (Just term) -> term
-substitute s (MkNodeTerm n children)
-  = MkNodeTerm n (Vector.map (substitute s) children)
+substitute s def (MkNodeTerm n children)
+  = MkNodeTerm n (Vector.map (substitute s def) children)
+
+substitute'
+  :: (Ord var)
+  => Substitution' node var
+  -> TTerm node var
+  -> TTerm node var
+substitute' s term = substitute s id term
 
 -- | The identity substitution.
 identity
-  :: Substitution node var
+  :: Substitution' node var
 identity = Map.empty
 
 -- |
@@ -83,18 +96,18 @@ identity = Map.empty
 --
 -- Laws:
 --
--- 1. For any @s ∷ 'Substitution'@, @s ≡ 'composition' s 'identity'@.
--- 2. For any @s ∷ 'Substitution'@, @s ≡ 'composition' 'identity' s@.
+-- 1. For any @s ∷ 'Substitution'@, @s ≡ 'compose' s 'identity'@.
+-- 2. For any @s ∷ 'Substitution'@, @s ≡ 'compose' 'identity' s@.
 -- 3. For any @a, b, c ∷ 'Substitution'@,
---    @'composition' ('composition' a b) c ≡ 'composition' a ('composition' b c)@.
-composition
+--    @'compose' ('compose' a b) c ≡ 'compose' a ('compose' b c)@.
+compose
   :: (Ord var)
-  => Substitution node var
-  -> Substitution node var
-  -> Substitution node var
-composition s1 s2
+  => Substitution' node var
+  -> Substitution' node var
+  -> Substitution' node var
+compose s1 s2
   = Map.unionWith (\_ _ -> error "lol")
-    (Map.map (substitute s1) s2)
+    (Map.map (substitute' s1) s2)
     (Map.difference s1 s2)
 
 -- |
@@ -106,12 +119,12 @@ composition s1 s2
 -- 1. FIXME: laws
 join
   :: (Ord var)
-  => Substitution node var
-  -> Substitution node var
-  -> Substitution node var
+  => Substitution' node var
+  -> Substitution' node var
+  -> Substitution' node var
 join s1 s2
   = Map.unionWith (\_ _ -> error "rofl")
-    (Map.map (substitute s1) s2)
+    (Map.map (substitute' s1) s2)
     ((domain s1 `Set.difference` introduced s2)
       |> Set.toList
       |> map (\k -> (k, fromJust (Map.lookup k s1)))
@@ -177,10 +190,75 @@ traverseSubterms term callback
     |> Map.toList
     |> mapM_ (uncurry callback)
 
+firstOccurrences
+  :: (Ord var)
+  => TTerm node var
+  -> Map var Position
+firstOccurrences (MkVarTerm var)
+  = [(var, Position [])]
+firstOccurrences (MkNodeTerm node children)
+  = Vector.toList children
+    |> zip [0 ..]
+    |> map (second firstOccurrences)
+    |> map (\(i, m) -> Map.map (consPosition i) m)
+    |> Map.unionsWith min
+
 normalizeTerm
-  :: TTerm node var
+  :: forall node var.
+     (Ord var)
+  => TTerm node var
   -> (TTerm node Int, Vector var)
-normalizeTerm = undefined
+normalizeTerm term = (result, Vector.fromList sorted)
+  where
+    firsts :: Map var Position
+    firsts = firstOccurrences term
+
+    sorted :: [var]
+    sorted = firsts
+             |> Map.toList
+             |> sortBy (\x y -> if snd x == snd y
+                                then EQ
+                                else (if snd x ≺ snd y then LT else GT))
+             |> map fst
+
+    substitution :: Substitution node var Int
+    substitution = sorted
+                   |> zip [0 ..]
+                   |> map (\(i, v) -> (v, MkVarTerm i))
+                   |> Map.fromList
+
+    result :: TTerm node Int
+    result = substitute
+             substitution
+             (\_ -> error "normalizeTerm: this should never happen")
+             term
+
+normalizeSubstitution
+  :: forall node var.
+     (Ord var)
+  => Substitution' node var
+  -> (Substitution node var Int, Vector var)
+normalizeSubstitution subst = (temp4, temp3)
+  where
+    temp1 :: Vector (var, TTerm (Maybe node) var)
+    temp1 = Map.map (TTerm.mapNode Just) subst
+            |> Map.toList
+            |> sortBy (comparing fst)
+            |> Vector.fromList
+
+    temp2 :: TTerm (Maybe node) Int
+    temp3 :: Vector var
+    (temp2, temp3) = Vector.map snd temp1
+                     |> MkNodeTerm Nothing
+                     |> normalizeTerm
+
+    temp4 :: Substitution node var Int
+    temp4 = [0 .. Vector.length temp1 - 1]
+            |> map (\i -> indexPosition (Position [i]) temp2
+                          |> fromMaybe (error "normalizeSubstitution: bad")
+                          |> TTerm.mapNode fromJust)
+            |> zip (map fst (Vector.toList temp1))
+            |> Map.fromList
 
 --------------------------------------------------------------------------------
 
@@ -190,7 +268,7 @@ newtype Indicator
 
 data SubstitutionTree node var
   = SubstitutionTree
-    { substitutionTreeContent  :: !(Substitution node (Either Indicator var))
+    { substitutionTreeContent  :: !(Substitution' node (Either Indicator var))
     , substitutionTreeChildren :: !(Vector (SubstitutionTree node var))
     }
   deriving (Show)
@@ -213,21 +291,27 @@ lookupTerm = undefined
 
 -- FIXME: move to tests
 
-compositionTest :: IO ()
-compositionTest = do
-  let a, b :: Substitution String String
+precTest :: IO ()
+precTest = do
+  assert (Position [1, 1] ≺ Position [1, 2])    (pure ())
+  assert (Position [1, 1] ≺ Position [2])       (pure ())
+  assert (Position [1, 2] ≺ Position [1, 2, 1]) (pure ())
+
+composeTest :: IO ()
+composeTest = do
+  let a, b :: Substitution' String String
       a = [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
       b = [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("x", MkNodeTerm "a" [])
                  , ("y", MkNodeTerm "c" [])
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
                  ]
-  let actual   = composition a b
+  let actual   = compose a b
   assert (expected == actual) (putStrLn "SUCCESS")
 
 joinTest :: IO ()
 joinTest = do
-  let a, b :: Substitution String String
+  let a, b :: Substitution' String String
       a = [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
       b = [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("y", MkNodeTerm "c" [])
