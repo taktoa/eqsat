@@ -5,6 +5,7 @@
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE InstanceSigs         #-}
 {-# LANGUAGE KindSignatures       #-}
 {-# LANGUAGE LambdaCase           #-}
 {-# LANGUAGE RoleAnnotations      #-}
@@ -122,6 +123,20 @@ instance Functor (Term repr node) where
   fmap f (MkVarTerm  var)     = MkVarTerm (f var)
   fmap f (MkNodeTerm node cs) = Vector.map (fmap f) cs
                                 |> MkNodeTerm node
+
+-- | FIXME: doc
+instance Foldable (Term repr node) where
+  foldMap f (MkRefTerm _)     = mempty
+  foldMap f (MkVarTerm var)   = f var
+  foldMap f (MkNodeTerm _ cs) = Vector.toList cs
+                                |> map (foldMap f)
+                                |> mconcat
+
+-- | FIXME: doc
+instance Traversable (Term repr node) where
+  traverse f (MkRefTerm ref)      = pure (MkRefTerm ref)
+  traverse f (MkVarTerm var)      = MkVarTerm <$> f var
+  traverse f (MkNodeTerm node cs) = MkNodeTerm node <$> traverse (traverse f) cs
 
 -- | FIXME: doc
 instance (Hashable node, Hashable var) => Hashable (TTerm node var) where
