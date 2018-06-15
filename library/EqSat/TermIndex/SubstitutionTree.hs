@@ -18,6 +18,7 @@ import           Control.Arrow          (first, second)
 import           Control.Exception
 import           Control.Monad          (guard)
 import           Data.Coerce            (coerce)
+import           Data.Either
 import           Data.List              (sortBy)
 import           Data.Maybe
 import           Data.Ord               (comparing)
@@ -48,7 +49,7 @@ import qualified EqSat.Internal.Refined as Refined
 newtype Substitution node v1 v2
   = Substitution
     { fromSubstitution :: Map v1 (TTerm node v2) }
-  deriving (Eq, Show)
+  deriving (Eq, Ord, Show)
 
 type Substitution' node var = Substitution node var var
 
@@ -281,6 +282,53 @@ data SubstitutionTree node var
     , substitutionTreeChildren :: !(Vector (SubstitutionTree node var))
     }
   deriving (Show)
+
+createNode
+  :: forall node var.
+     (Ord var)
+  => Substitution' node (Either Indicator var)
+  -> Vector (SubstitutionTree node var)
+  -> Maybe (SubstitutionTree node var)
+createNode = (\content children -> if validate content children
+                                   then Just (SubstitutionTree content children)
+                                   else Nothing)
+  where
+    validate
+      :: Substitution' node (Either Indicator var)
+      -> Vector (SubstitutionTree node var)
+      -> Bool
+    validate content children
+      = (Vector.length children /= 1)
+        && go1 undefined {- FIXME -} (SubstitutionTree content children)
+        && go2 Set.empty (SubstitutionTree content children)
+
+    -- For every path (Σ₁, Ω₁), …, (Σₙ, Ωₙ) from the root to a leaf of a
+    -- non-empty tree, I(Σₙ • … • Σ₁) ⊂ V*.
+    go1 :: Substitution' node (Either Indicator var)
+        -> SubstitutionTree node var
+        -> Bool
+    go1 s (SubstitutionTree content children)
+      = if Vector.null children
+        then all isLeft (introduced (content `join` s))
+        else Vector.all (go1 (content `join` s)) children
+
+    -- For every path (Σ₁, Ω₁), …, (Σₙ, Ωₙ) from the root to a leaf of a
+    -- non-empty tree, DOM(Σᵢ) ∩ (DOM(Σ₁) ∪ … ∪ DOM(Σᵢ₋₁)) = ∅
+    go2 :: Set (Either Indicator var)
+        -> SubstitutionTree node var
+        -> Bool
+    go2 vs (SubstitutionTree content children)
+      = Set.null (domain content `Set.intersection` vs)
+        && Vector.all (go2 (vs `Set.union` domain content)) children
+
+allSubstitutions
+  :: (Ord var, Ord node)
+  => SubstitutionTree node var
+  -> Set (Substitution' node (Either Indicator var))
+allSubstitutions (SubstitutionTree content children)
+  = Set.singleton content
+    `Set.union`
+    (mconcat (map allSubstitutions (Vector.toList children)))
 
 insertTerm
   :: (Ord node, Ord var)
