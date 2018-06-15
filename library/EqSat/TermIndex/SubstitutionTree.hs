@@ -272,6 +272,33 @@ normalizeSubstitution subst = (temp4, temp3)
 
 --------------------------------------------------------------------------------
 
+-- | An antiunification algorithm on terms of type @'TTerm' node var@, as
+--   defined in section 7.3 of /Substitution Tree Indexing/.
+newtype Generalizer node var
+  = Generalizer
+    { runGeneralizer :: Substitution' node var
+                     -> Substitution' node var
+                     -> ( (Substitution' node var, Substitution' node var)
+                        , Substitution' node var
+                        )
+    }
+
+computeMSCG
+  :: (Eq node, Ord var)
+  => Generalizer node var
+  -> Substitution' node var
+  -> Substitution' node var
+  -> ( (Substitution' node var, Substitution' node var)
+     , Substitution' node var
+     )
+computeMSCG (Generalizer f) s₁ s₂
+  = let ((σ₁, σ₂), μ) = f s₁ s₂
+    in (((σ₁ `join` μ) == s₁) && ((σ₂ `join` μ) == s₂))
+       `assert`
+       ((σ₁, σ₂), μ)
+
+--------------------------------------------------------------------------------
+
 newtype Indicator
   = Indicator { fromIndicator :: Int }
   deriving (Eq, Ord, Show)
@@ -330,6 +357,20 @@ allSubstitutions (SubstitutionTree content children)
     `Set.union`
     (mconcat (map allSubstitutions (Vector.toList children)))
 
+insertSubstitution
+  :: (Ord node, Ord var)
+  => Substitution' node var
+  -> SubstitutionTree node var
+  -> SubstitutionTree node var
+insertSubstitution = undefined
+
+lookupSubstitution
+  :: (Ord node, Ord var)
+  => SubstitutionTree node var
+  -> Substitution' node var
+  -> Set (Substitution' node var)
+lookupSubstitution = undefined
+
 insertTerm
   :: (Ord node, Ord var)
   => TTerm node var
@@ -341,7 +382,7 @@ lookupTerm
   :: (Ord node, Ord var)
   => SubstitutionTree node var
   -> TTerm node var
-  -> Set ()
+  -> Set (TTerm node var)
 lookupTerm = undefined
 
 --------------------------------------------------------------------------------
