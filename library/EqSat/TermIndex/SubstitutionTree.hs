@@ -45,26 +45,32 @@ import qualified EqSat.Internal.Refined as Refined
 
 --------------------------------------------------------------------------------
 
-type Substitution node v1 v2 = Map v1 (TTerm node v2)
+newtype Substitution node v1 v2
+  = Substitution
+    { fromSubstitution :: Map v1 (TTerm node v2) }
+  deriving (Eq, Show)
 
 type Substitution' node var = Substitution node var var
 
 domain
   :: Substitution node v1 v2
   -> Set v1
-domain = Map.keysSet
+domain = fromSubstitution .> Map.keysSet
 
 codomain
   :: (Ord node, Ord v1, Ord v2)
   => Substitution node v1 v2
   -> Set (TTerm node v2)
-codomain = Map.toList .> map snd .> Set.fromList
+codomain = fromSubstitution .> Map.toList .> map snd .> Set.fromList
 
 introduced
   :: (Ord v2)
   => Substitution node v1 v2
   -> Set v2
-introduced = Map.toList .> map (snd .> TTerm.freeVars) .> mconcat
+introduced = fromSubstitution
+             .> Map.toList
+             .> map (snd .> TTerm.freeVars)
+             .> mconcat
 
 substitute
   :: (Ord v1)
@@ -72,12 +78,11 @@ substitute
   -> (v1 -> v2)
   -> TTerm node v1
   -> TTerm node v2
-substitute s def (MkVarTerm var)
-  = case Map.lookup var s of
-      Nothing     -> MkVarTerm (def var)
-      (Just term) -> term
-substitute s def (MkNodeTerm n children)
-  = MkNodeTerm n (Vector.map (substitute s def) children)
+substitute (Substitution s) def = go
+  where
+    go (MkVarTerm var)   = Map.lookup var s
+                           |> fromMaybe (MkVarTerm (def var))
+    go (MkNodeTerm n cs) = MkNodeTerm n (Vector.map go cs)
 
 substitute'
   :: (Ord var)
@@ -89,7 +94,7 @@ substitute' s term = substitute s id term
 -- | The identity substitution.
 identity
   :: Substitution' node var
-identity = Map.empty
+identity = Substitution Map.empty
 
 -- |
 -- Composition of substitutions (in the same order as the @'<.'@ operator).
@@ -105,10 +110,10 @@ compose
   => Substitution' node var
   -> Substitution' node var
   -> Substitution' node var
-compose s1 s2
-  = Map.unionWith (\_ _ -> error "lol")
-    (Map.map (substitute' s1) s2)
-    (Map.difference s1 s2)
+compose (Substitution s1) (Substitution s2)
+  = Substitution (Map.unionWith (\_ _ -> error "lol")
+                  (Map.map (substitute' (Substitution s1)) s2)
+                  (Map.difference s1 s2))
 
 -- |
 -- The join of two substitutions, as defined in /Substitution Tree Indexing/
@@ -122,13 +127,14 @@ join
   => Substitution' node var
   -> Substitution' node var
   -> Substitution' node var
-join s1 s2
-  = Map.unionWith (\_ _ -> error "rofl")
-    (Map.map (substitute' s1) s2)
-    ((domain s1 `Set.difference` introduced s2)
-      |> Set.toList
-      |> map (\k -> (k, fromJust (Map.lookup k s1)))
-      |> Map.fromList)
+join (Substitution s1) (Substitution s2)
+  = (Map.unionWith (\_ _ -> error "rofl")
+     (Map.map (substitute' (Substitution s1)) s2)
+     ((domain (Substitution s1) `Set.difference` introduced (Substitution s2))
+       |> Set.toList
+       |> map (\k -> (k, fromJust (Map.lookup k s1)))
+       |> Map.fromList))
+    |> Substitution
 
 --------------------------------------------------------------------------------
 
@@ -226,6 +232,7 @@ normalizeTerm term = (result, Vector.fromList sorted)
                    |> zip [0 ..]
                    |> map (\(i, v) -> (v, MkVarTerm i))
                    |> Map.fromList
+                   |> Substitution
 
     result :: TTerm node Int
     result = substitute
@@ -241,7 +248,8 @@ normalizeSubstitution
 normalizeSubstitution subst = (temp4, temp3)
   where
     temp1 :: Vector (var, TTerm (Maybe node) var)
-    temp1 = Map.map (TTerm.mapNode Just) subst
+    temp1 = fromSubstitution subst
+            |> Map.map (TTerm.mapNode Just)
             |> Map.toList
             |> sortBy (comparing fst)
             |> Vector.fromList
@@ -259,6 +267,7 @@ normalizeSubstitution subst = (temp4, temp3)
                           |> TTerm.mapNode fromJust)
             |> zip (map fst (Vector.toList temp1))
             |> Map.fromList
+            |> Substitution
 
 --------------------------------------------------------------------------------
 
@@ -300,23 +309,23 @@ precTest = do
 composeTest :: IO ()
 composeTest = do
   let a, b :: Substitution' String String
-      a = [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
-      b = [("z", MkNodeTerm "f" [MkVarTerm "x"])]
+      a = Substitution [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
+      b = Substitution [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("x", MkNodeTerm "a" [])
                  , ("y", MkNodeTerm "c" [])
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
-                 ]
+                 ] |> Substitution
   let actual   = compose a b
   assert (expected == actual) (putStrLn "SUCCESS")
 
 joinTest :: IO ()
 joinTest = do
   let a, b :: Substitution' String String
-      a = [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
-      b = [("z", MkNodeTerm "f" [MkVarTerm "x"])]
+      a = Substitution [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
+      b = Substitution [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("y", MkNodeTerm "c" [])
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
-                 ]
+                 ] |> Substitution
   let actual   = join a b
   assert (expected == actual) (putStrLn "SUCCESS")
 
