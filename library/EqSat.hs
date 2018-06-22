@@ -149,7 +149,7 @@ data TypedEquation node var ty
   = UnsafeMkTypedEquation
     { _typedEquationUnderlying :: !(Equation node var)
     , _typedEquationType       :: !ty
-    , _typedEquationVarTypes   :: !(var -> Maybe ty)
+    , _typedEquationVarTypes   :: !(Map var ty)
     }
   deriving ()
 
@@ -208,8 +208,8 @@ checkEquation (lhs, rhs) = do
 
     let mtfFailure = throwImpossible "metavariable typing function failure"
 
-    lhsVarType <- maybe mtfFailure pure (lhsMTF usedVar)
-    rhsVarType <- maybe mtfFailure pure (rhsMTF usedVar)
+    lhsVarType <- maybe mtfFailure pure (Map.lookup lhsMTF usedVar)
+    rhsVarType <- maybe mtfFailure pure (Map.lookup rhsMTF usedVar)
 
     unless (rhsVarType `isSubtype` lhsVarType) $ do
       let err = CheckEquationError.MetaVarNotSubtype
@@ -295,7 +295,6 @@ data PEG g node
 
 -- FIXME: write instance
 -- instance Eq (PEG g node) where
-
 
 -- | Smart constructor for PEGs.
 --

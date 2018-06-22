@@ -41,101 +41,14 @@ import           Flow                   ((.>), (|>))
 import           EqSat.Term             (TTerm, Term (MkNodeTerm, MkVarTerm))
 import qualified EqSat.Term             as TTerm
 
+import           EqSat.Substitution
+                 (EndoSubstitution,
+                 Substitution (Substitution, fromSubstitution),
+                 TotalSubstitution (TotalSubstitution))
+import qualified EqSat.Substitution     as Substitution
+
 import           EqSat.Internal.Refined (Refined, refine, unsafeRefine)
 import qualified EqSat.Internal.Refined as Refined
-
---------------------------------------------------------------------------------
-
-newtype Substitution node v1 v2
-  = Substitution
-    { fromSubstitution :: Map v1 (TTerm node v2) }
-  deriving (Eq, Ord, Show)
-
-type Substitution' node var = Substitution node var var
-
-domain
-  :: Substitution node v1 v2
-  -> Set v1
-domain = fromSubstitution .> Map.keysSet
-
-codomain
-  :: (Ord node, Ord v1, Ord v2)
-  => Substitution node v1 v2
-  -> Set (TTerm node v2)
-codomain = fromSubstitution .> Map.toList .> map snd .> Set.fromList
-
-introduced
-  :: (Ord v2)
-  => Substitution node v1 v2
-  -> Set v2
-introduced = fromSubstitution
-             .> Map.toList
-             .> map (snd .> TTerm.freeVars)
-             .> mconcat
-
-substitute
-  :: (Ord v1)
-  => Substitution node v1 v2
-  -> (v1 -> v2)
-  -> TTerm node v1
-  -> TTerm node v2
-substitute (Substitution s) def = go
-  where
-    go (MkVarTerm var)   = Map.lookup var s
-                           |> fromMaybe (MkVarTerm (def var))
-    go (MkNodeTerm n cs) = MkNodeTerm n (Vector.map go cs)
-
-substitute'
-  :: (Ord var)
-  => Substitution' node var
-  -> TTerm node var
-  -> TTerm node var
-substitute' s term = substitute s id term
-
--- | The identity substitution.
-identity
-  :: Substitution' node var
-identity = Substitution Map.empty
-
--- |
--- Composition of substitutions (in the same order as the @'<.'@ operator).
---
--- Laws:
---
--- 1. For any @s ∷ 'Substitution'@, @s ≡ 'compose' s 'identity'@.
--- 2. For any @s ∷ 'Substitution'@, @s ≡ 'compose' 'identity' s@.
--- 3. For any @a, b, c ∷ 'Substitution'@,
---    @'compose' ('compose' a b) c ≡ 'compose' a ('compose' b c)@.
-compose
-  :: (Ord var)
-  => Substitution' node var
-  -> Substitution' node var
-  -> Substitution' node var
-compose (Substitution s1) (Substitution s2)
-  = Substitution (Map.unionWith (\_ _ -> error "lol")
-                  (Map.map (substitute' (Substitution s1)) s2)
-                  (Map.difference s1 s2))
-
--- |
--- The join of two substitutions, as defined in /Substitution Tree Indexing/
--- by Peter Graf.
---
--- Laws:
---
--- 1. FIXME: laws
-join
-  :: (Ord var)
-  => Substitution' node var
-  -> Substitution' node var
-  -> Substitution' node var
-join (Substitution s1) (Substitution s2)
-  = (Map.unionWith (\_ _ -> error "rofl")
-     (Map.map (substitute' (Substitution s1)) s2)
-     ((domain (Substitution s1) `Set.difference` introduced (Substitution s2))
-       |> Set.toList
-       |> map (\k -> (k, fromJust (Map.lookup k s1)))
-       |> Map.fromList))
-    |> Substitution
 
 --------------------------------------------------------------------------------
 
@@ -236,15 +149,16 @@ normalizeTerm term = (result, Vector.fromList sorted)
                    |> Substitution
 
     result :: TTerm node Int
-    result = substitute
-             substitution
-             (\_ -> error "normalizeTerm: this should never happen")
+    result = Substitution.substituteTotal
+             (TotalSubstitution
+              substitution
+              (\_ -> error "normalizeTerm: this should never happen"))
              term
 
 normalizeSubstitution
   :: forall node var.
      (Ord var)
-  => Substitution' node var
+  => EndoSubstitution node var
   -> (Substitution node var Int, Vector var)
 normalizeSubstitution subst = (temp4, temp3)
   where
@@ -276,26 +190,26 @@ normalizeSubstitution subst = (temp4, temp3)
 --   defined in section 7.3 of /Substitution Tree Indexing/.
 newtype Generalizer node var
   = Generalizer
-    { runGeneralizer :: Substitution' node var
-                     -> Substitution' node var
-                     -> ( (Substitution' node var, Substitution' node var)
-                        , Substitution' node var
+    { runGeneralizer :: EndoSubstitution node var
+                     -> EndoSubstitution node var
+                     -> ( (EndoSubstitution node var, EndoSubstitution node var)
+                        , EndoSubstitution node var
                         )
     }
 
 computeMSCG
   :: (Eq node, Ord var)
   => Generalizer node var
-  -> Substitution' node var
-  -> Substitution' node var
-  -> ( (Substitution' node var, Substitution' node var)
-     , Substitution' node var
+  -> EndoSubstitution node var
+  -> EndoSubstitution node var
+  -> ( (EndoSubstitution node var, EndoSubstitution node var)
+     , EndoSubstitution node var
      )
 computeMSCG (Generalizer f) s₁ s₂
   = let ((σ₁, σ₂), μ) = f s₁ s₂
-    in (((σ₁ `join` μ) == s₁) && ((σ₂ `join` μ) == s₂))
-       `assert`
-       ((σ₁, σ₂), μ)
+    in (    ((σ₁ `Substitution.join` μ) == s₁)
+         && ((σ₂ `Substitution.join` μ) == s₂)
+       ) `assert` ((σ₁, σ₂), μ)
 
 --------------------------------------------------------------------------------
 
@@ -305,7 +219,7 @@ newtype Indicator
 
 data SubstitutionTree node var
   = SubstitutionTree
-    { substitutionTreeContent  :: !(Substitution' node (Either Indicator var))
+    { substitutionTreeContent  :: !(EndoSubstitution node (Either Indicator var))
     , substitutionTreeChildren :: !(Vector (SubstitutionTree node var))
     }
   deriving (Show)
@@ -313,7 +227,7 @@ data SubstitutionTree node var
 createNode
   :: forall node var.
      (Ord var)
-  => Substitution' node (Either Indicator var)
+  => EndoSubstitution node (Either Indicator var)
   -> Vector (SubstitutionTree node var)
   -> Maybe (SubstitutionTree node var)
 createNode = (\content children -> if validate content children
@@ -321,7 +235,7 @@ createNode = (\content children -> if validate content children
                                    else Nothing)
   where
     validate
-      :: Substitution' node (Either Indicator var)
+      :: EndoSubstitution node (Either Indicator var)
       -> Vector (SubstitutionTree node var)
       -> Bool
     validate content children
@@ -331,13 +245,14 @@ createNode = (\content children -> if validate content children
 
     -- For every path (Σ₁, Ω₁), …, (Σₙ, Ωₙ) from the root to a leaf of a
     -- non-empty tree, I(Σₙ • … • Σ₁) ⊂ V*.
-    go1 :: Substitution' node (Either Indicator var)
+    go1 :: EndoSubstitution node (Either Indicator var)
         -> SubstitutionTree node var
         -> Bool
     go1 s (SubstitutionTree content children)
-      = if Vector.null children
-        then all isLeft (introduced (content `join` s))
-        else Vector.all (go1 (content `join` s)) children
+      = let s' = content `Substitution.join` s
+        in if Vector.null children
+           then all isLeft (Substitution.introduced s')
+           else Vector.all (go1 s') children
 
     -- For every path (Σ₁, Ω₁), …, (Σₙ, Ωₙ) from the root to a leaf of a
     -- non-empty tree, DOM(Σᵢ) ∩ (DOM(Σ₁) ∪ … ∪ DOM(Σᵢ₋₁)) = ∅
@@ -345,13 +260,14 @@ createNode = (\content children -> if validate content children
         -> SubstitutionTree node var
         -> Bool
     go2 vs (SubstitutionTree content children)
-      = Set.null (domain content `Set.intersection` vs)
-        && Vector.all (go2 (vs `Set.union` domain content)) children
+      = let d = Substitution.domain content
+        in Set.null (vs `Set.intersection` d)
+           && Vector.all (go2 (vs `Set.union` d)) children
 
 allSubstitutions
   :: (Ord var, Ord node)
   => SubstitutionTree node var
-  -> Set (Substitution' node (Either Indicator var))
+  -> Set (EndoSubstitution node (Either Indicator var))
 allSubstitutions (SubstitutionTree content children)
   = Set.singleton content
     `Set.union`
@@ -359,7 +275,7 @@ allSubstitutions (SubstitutionTree content children)
 
 insertSubstitution
   :: (Ord node, Ord var)
-  => Substitution' node var
+  => EndoSubstitution node var
   -> SubstitutionTree node var
   -> SubstitutionTree node var
 insertSubstitution = undefined
@@ -367,8 +283,8 @@ insertSubstitution = undefined
 lookupSubstitution
   :: (Ord node, Ord var)
   => SubstitutionTree node var
-  -> Substitution' node var
-  -> Set (Substitution' node var)
+  -> EndoSubstitution node var
+  -> Set (EndoSubstitution node var)
 lookupSubstitution = undefined
 
 insertTerm
@@ -397,25 +313,25 @@ precTest = do
 
 composeTest :: IO ()
 composeTest = do
-  let a, b :: Substitution' String String
+  let a, b :: EndoSubstitution String String
       a = Substitution [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
       b = Substitution [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("x", MkNodeTerm "a" [])
                  , ("y", MkNodeTerm "c" [])
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
                  ] |> Substitution
-  let actual   = compose a b
+  let actual   = Substitution.composeEndo a b
   assert (expected == actual) (putStrLn "SUCCESS")
 
 joinTest :: IO ()
 joinTest = do
-  let a, b :: Substitution' String String
+  let a, b :: EndoSubstitution String String
       a = Substitution [("x", MkNodeTerm "a" []), ("y", MkNodeTerm "c" [])]
       b = Substitution [("z", MkNodeTerm "f" [MkVarTerm "x"])]
   let expected = [ ("y", MkNodeTerm "c" [])
                  , ("z", MkNodeTerm "f" [MkNodeTerm "a" []])
                  ] |> Substitution
-  let actual   = join a b
+  let actual   = Substitution.join a b
   assert (expected == actual) (putStrLn "SUCCESS")
 
 recursiveSubtermsTest :: IO ()

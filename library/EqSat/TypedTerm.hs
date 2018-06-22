@@ -18,20 +18,21 @@ module EqSat.TypedTerm
 
 --------------------------------------------------------------------------------
 
-import           Control.Monad      (guard)
-import           Data.Maybe         (isJust)
+import           Control.Monad   (guard)
+import           Data.Maybe      (isJust)
 
-import           GHC.Generics       (Generic)
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 
-import           Flow               ((.>))
+import           GHC.Generics    (Generic)
 
-import           Data.Set           (Set)
-import qualified Data.Set           as Set
+import           Flow            ((.>), (|>))
 
-import           EqSat.Substitution (Substitution)
+import           Data.Set        (Set)
+import qualified Data.Set        as Set
 
-import           EqSat.Term         (Term)
-import qualified EqSat.Term         as Term
+import           EqSat.Term      (Term)
+import qualified EqSat.Term      as Term
 
 --------------------------------------------------------------------------------
 
@@ -61,8 +62,8 @@ import qualified EqSat.Term         as Term
 data TypedTerm repr node var ty
   = UnsafeMkTypedTerm
     { _typedTermUnderlyingTerm :: Term repr node var
-    , _typedTermOverallType    :: Substitution var ty -> Maybe ty
-    , _typedTermVarType        :: Substitution var ty
+    , _typedTermOverallType    :: Map var ty -> Maybe ty
+    , _typedTermVarType        :: Map var ty
     }
   deriving (Generic)
 
@@ -87,9 +88,9 @@ makeTypedTerm
   :: (Ord var)
   => Term repr node var
   -- ^ The underlying 'Term' of the 'TypedTerm' we are going to make.
-  -> (Substitution var ty -> Maybe ty)
+  -> (Map var ty -> Maybe ty)
   -- ^ The overall 'Type' of the given 'Term'.
-  -> Substitution var ty
+  -> Map var ty
   -- ^ The most general inferred type for each of the variables in the 'Term'.
   --   The function must return 'Just' if the given variable was one of the
   --   free variables of the term, or else an 'AssertionFailed' exception
@@ -101,11 +102,11 @@ makeTypedTerm term overallType varType = do
   let tterm = UnsafeMkTypedTerm
               { _typedTermUnderlyingTerm = term
               , _typedTermOverallType    = overallType
-              , _typedTermVarType        = \var -> if var `Set.member` free
-                                                   then varType var
-                                                   else Nothing
+              , _typedTermVarType        = Set.toList free
+                                           |> map (\v -> (v, varType Map.! v))
+                                           |> Map.fromList
               }
-  guard (all (varType .> isJust) free)
+  -- guard (all ((varType `Map.lookup`) .> isJust) free)
   guard (isJust (overallType varType))
   pure tterm
 
@@ -123,7 +124,7 @@ underlyingTerm = _typedTermUnderlyingTerm
 wholeTermTypingFunction
   :: TypedTerm repr node var ty
   -- ^ A 'TypedTerm'.
-  -> (Substitution var ty -> Maybe ty)
+  -> (Map var ty -> Maybe ty)
   -- ^ The whole-term typing function of the given 'TypedTerm'.
 wholeTermTypingFunction = _typedTermOverallType
 
@@ -131,7 +132,7 @@ wholeTermTypingFunction = _typedTermOverallType
 metavariableTypingFunction
   :: TypedTerm repr node var ty
   -- ^ A 'TypedTerm'.
-  -> Substitution var ty
+  -> Map var ty
   -- ^ The metavariable typing function of the given 'TypedTerm'.
 metavariableTypingFunction = _typedTermVarType
 

@@ -92,6 +92,8 @@ library
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
                         , EqSat.Substitution
+                        , EqSat.MSCG
+                        , EqSat.MSCG.Class
                         , EqSat.TermIndex
                         , EqSat.TermIndex.Class
                         , EqSat.TermIndex.DiscriminationNet
