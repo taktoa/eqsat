@@ -9,12 +9,17 @@ with pkgs.haskell.lib;
 {
   smallcheck-lens = doJailbreak super.smallcheck-lens;
   tasty-lens = doJailbreak super.tasty-lens;
+  loc = doJailbreak super.loc;
+  loc-test = doJailbreak super.loc-test;
 
-  judy = (
-    with { unpatchedJudy = super.judy.override { Judy = pkgs.judy; }; };
-    appendPatch unpatchedJudy ./patches/judy.patch);
+  judy = super.judy.override { Judy = pkgs.judy; };
 
   disjoint-containers = dontCheck super.disjoint-containers;
+
+  crackNum = super.crackNum_2_0;
+
+  impure-containers = (
+    appendPatch super.impure-containers ./patches/impure-containers.patch);
 
   sbv = (
     with rec {

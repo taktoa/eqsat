@@ -1,0 +1,55 @@
+diff --git a/src/Data/Graph/Immutable.hs b/src/Data/Graph/Immutable.hs
+index 2cd998d..13bca60 100644
+--- a/src/Data/Graph/Immutable.hs
++++ b/src/Data/Graph/Immutable.hs
+@@ -259,9 +259,11 @@ instance Ord a => Ord (MinDistance a) where
+       Nothing -> LT
+       Just bval -> compare aval bval
+ 
++instance Ord a => Semigroup (MinDistance a) where
++  ma <> mb = min ma mb
++
+ instance Ord a => Monoid (MinDistance a) where
+   mempty = MinDistance Nothing
+-  mappend ma mb = min ma mb
+ 
+ -- | This is a generalization of Dijkstra\'s algorithm. Like the original,
+ --   it takes a start 'Vertex' but unlike the original, it does not take
+diff --git a/src/Data/HashMap/Mutable/Basic.hs b/src/Data/HashMap/Mutable/Basic.hs
+index 4ad5955..aff177c 100644
+--- a/src/Data/HashMap/Mutable/Basic.hs
++++ b/src/Data/HashMap/Mutable/Basic.hs
+@@ -364,11 +364,13 @@ data Slot = Slot {
+ 
+ 
+ ------------------------------------------------------------------------------
+-instance Monoid Slot where
+-    mempty = Slot maxBound 0
+-    (Slot x1 b1) `mappend` (Slot x2 b2) =
++
++instance Semigroup Slot where
++    (Slot x1 b1) <> (Slot x2 b2) =
+         if x1 == maxBound then Slot x2 b2 else Slot x1 b1
+ 
++instance Monoid Slot where
++    mempty = Slot maxBound 0
+ 
+ ------------------------------------------------------------------------------
+ -- Returns the slot in the array where it would be safe to write the given key.
+diff --git a/test/Spec.hs b/test/Spec.hs
+index e5a11ec..dd79a7e 100644
+--- a/test/Spec.hs
++++ b/test/Spec.hs
+@@ -77,9 +77,11 @@ instance Arbitrary Min where
+   arbitrary = fmap Min (choose (0,20))
+   shrink (Min a) = fmap Min $ filter (>= 0) $ shrinkIntegral a
+ 
++instance Semigroup Min where
++  (Min a) <> (Min b) = Min (min a b)
++
+ instance Monoid Min where
+   mempty = Min maxBound
+-  mappend (Min a) (Min b) = Min (min a b)
+ 
+ newtype MyElement = MyElement { getMyElement :: Int }
+   deriving (Show,Read,Eq,Ord)
