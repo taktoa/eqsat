@@ -39,6 +39,7 @@ library
     build-depends:        base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3
                         , binary                      >= 0.8   && < 0.9
+                        , bound                       >= 2.0   && < 2.1
                         , bytestring                  >= 0.10  && < 0.11
                         , cborg                       >= 0.2   && < 0.3
                         , cborg-json                  >= 0.2   && < 0.3
@@ -91,6 +92,7 @@ library
                         , EqSat.Domain
                         , EqSat.TypeSystem
                         , EqSat.IsExpression
+                        , EqSat.Normalization
                         , EqSat.Substitution
                         , EqSat.MSCG
                         , EqSat.MSCG.Class
@@ -142,6 +144,7 @@ test-suite tests
                         , base                        >= 4.8   && < 5.0
                         , aeson                       >= 1.0   && < 1.3
                         , binary                      >= 0.8   && < 0.9
+                        , bound                       >= 2.0   && < 2.1
                         , bytestring                  >= 0.10  && < 0.11
                         , cborg                       >= 0.2   && < 0.3
                         , cborg-json                  >= 0.2   && < 0.3

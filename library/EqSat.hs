@@ -168,6 +168,8 @@ mapError f action = do
     Left  e -> throwError (f e)
     Right r -> pure r
 
+{-
+
 -- | FIXME: doc
 checkEquation
   :: forall expr m node var.
@@ -245,6 +247,8 @@ checkEquation (lhs, rhs) = do
                }
 
   pure result
+
+-}
 
 --------------------------------------------------------------------------------
 
