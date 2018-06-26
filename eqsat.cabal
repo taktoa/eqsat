@@ -18,7 +18,7 @@ synopsis:                 A generic Haskell implementation of the
 description:              A generic Haskell implementation of the
                           equality saturation algorithm for superoptimization.
 extra-source-files:       README.md
-tested-with:              GHC == 8.2.2
+tested-with:              GHC == 8.4.3
 
 --------------------------------------------------------------------------------
 
