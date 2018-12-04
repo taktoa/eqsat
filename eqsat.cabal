@@ -48,6 +48,7 @@ library
                         , contravariant               >= 1.4   && < 1.5
                         , data-partition              >= 0.3   && < 0.4
                         , deepseq                     >= 1.4   && < 1.5
+                        , deriving-compat             >= 0.4   && < 0.5
                         , eigen                       >= 2.1   && < 2.2
                         , exceptions                  >= 0.8   && < 0.9
                         , flow                        >= 1.0   && < 1.1
@@ -151,6 +152,7 @@ test-suite tests
                         , contravariant               >= 1.4   && < 1.5
                         , data-partition              >= 0.3   && < 0.4
                         , deepseq                     >= 1.4   && < 1.5
+                        , deriving-compat             >= 0.4   && < 0.5
                         , eigen                       >= 2.1   && < 2.2
                         , exceptions                  >= 0.8   && < 0.9
                         , flow                        >= 1.0   && < 1.1

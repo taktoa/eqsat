@@ -1,123 +1,167 @@
+{-# LANGUAGE DeriveFoldable      #-}
+{-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE DeriveTraversable   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE TemplateHaskell     #-}
 
 module EqSat.Normalization where
 
-import           Data.Void (Void)
+import           Bound
+import           Control.Monad        (ap)
+import           Data.Deriving
+                 (deriveEq1, deriveOrd1, deriveRead1, deriveShow1)
+import           Data.Functor.Classes
+import           Data.Map.Strict      (Map)
+import qualified Data.Map.Strict      as Map
+import           Data.Set             (Set)
+import qualified Data.Set             as Set
+import           Data.Unique
+import           Data.Void            (Void)
 import           Flow
 
-data HOTerm c where
-  Var   :: !Int                       -> HOTerm c
-  Const :: !c                         -> HOTerm c
-  (:@:) :: !(HOTerm c) -> !(HOTerm c) -> HOTerm c
-  Lam   :: !(HOTerm c)                -> HOTerm c
+data Variable v
+  = BVar {-# UNPACK #-} !Unique
+  | FVar {-# UNPACK #-} !v
+  deriving (Eq, Ord)
 
-deriving instance (Eq   c) => Eq   (HOTerm c)
-deriving instance (Ord  c) => Ord  (HOTerm c)
-deriving instance (Show c) => Show (HOTerm c)
-deriving instance (Read c) => Read (HOTerm c)
+data HOType
+  = Star
+  | !HOType :-> !HOType
+  deriving (Eq, Ord, Show, Read)
+
+infixr 9 :->
+
+data HOTerm v where
+  Var   :: !v                           -> HOTerm v
+  (:@:) :: !(HOTerm v) -> !(HOTerm v)   -> HOTerm v
+  Lam   :: !HOType -> !v -> !(HOTerm v) -> HOTerm v
 
 infixl 9 :@:
 
-abstract :: HOTerm c -> HOTerm c
-abstract = go 0
+deriving instance (Eq   v) => Eq   (HOTerm v)
+deriving instance (Show v) => Show (HOTerm v)
+deriving instance Functor     HOTerm
+deriving instance Foldable    HOTerm
+deriving instance Traversable HOTerm
+
+uniquify :: forall v. (Ord v) => HOTerm v -> IO (HOTerm (Variable v))
+uniquify = go Map.empty
   where
-    go n (Var i)   = Var (if i < n then i else i + 1)
-    go n (Const c) = Const c
-    go n (s :@: t) = go n s :@: go n t
-    go n (Lam t)   = Lam (go (n + 1) t)
+    go :: Map v Unique -> HOTerm v -> IO (HOTerm (Variable v))
+    go m (Var v) = undefined
 
-instantiate :: HOTerm c -> HOTerm c -> HOTerm c
-instantiate repl = go 0
+containsBetaRedex :: HOTerm v -> Bool
+containsBetaRedex (Lam _ _ _ :@: _) = True
+containsBetaRedex (s :@: t)         = containsBetaRedex s || containsBetaRedex t
+containsBetaRedex (Lam _ _ b)       = undefined
+containsBetaRedex _                 = False
+
+isInBNF :: HOTerm v -> Bool
+isInBNF = containsBetaRedex .> not
+
+betaReduce :: HOTerm v -> HOTerm v
+betaReduce = undefined
+
+-- betaReduce :: HOTerm v -> HOTerm v
+-- betaReduce (Var v)   = Var v
+-- betaReduce (Lam t b) = Lam t $ toScope $ betaReduce $ fromScope b
+-- betaReduce (f :@: a) = case whnf f of
+--                          (Lam _ b) -> betaReduce (instantiate1 a b)
+--                          f'        -> betaReduce f' :@: betaReduce a
+
+etaExpand :: (Eq v) => HOTerm v -> HOTerm v
+etaExpand = fix (\t -> let t' = go t
+                       in if isInBNF t' then t' else t)
   where
-    go n (Lam t)   = Lam (go (n + 1) t)
-    go n (s :@: t) = go n s :@: go n t
-    go n (Const c) = Const c
-    go n (Var i)   = if i == n then repl else Var i
+    go (Var v)     = Var v
+    go (f :@: a)   = etaExpand f
+    go (Lam t v b) = undefined
 
--- abstract :: HOTerm c -> HOTerm
--- abstract = go 0
---   where
---     go n (Var i)   = Var (if i < n then i + δ else i)
---     go n (Const c) = Const c
---     go n (s :@: t) = (shift δ s) :@: (shift δ t)
---     go n (Lam t)   = Lam (go (n + 1) t)
-
-betaReduce :: forall c. HOTerm c -> HOTerm c
-betaReduce = \case (Lam s :@: t) -> instantiate t s
-                   other         -> other
-  where
-    go :: (Int, HOTerm c) -> HOTerm c -> HOTerm c
-    go (var, term)
-      = \case (Var n)   -> if n == var
-                           then term
-                           else Var n
-              (Const c) -> Const c
-              (s :@: t) -> let f = go (var, term)
-                           in (f s) :@: (f t)
-              (Lam t)   -> Lam (go (var, abstract term) t)
-
-containsBetaRedex :: HOTerm c -> Bool
-containsBetaRedex (Lam _ :@: _) = True
-containsBetaRedex (s :@: t)     = [ containsBetaRedex s
-                                  , containsBetaRedex t
-                                  ] |> or
-containsBetaRedex (Lam t)       = containsBetaRedex t
-containsBetaRedex _             = False
-
-etaExpand :: HOTerm c -> HOTerm c
-etaExpand term = let result = Lam (term :@: Var 0)
-                 in if containsBetaRedex result then term else result
-
-completeBetaReduce :: HOTerm c -> HOTerm c
-completeBetaReduce (Lam t)       = Lam (completeBetaReduce t)
-completeBetaReduce (s :@: t)     = betaReduce (completeBetaReduce s :@: completeBetaReduce t)
-completeBetaReduce other         = other
-
-normalize :: forall c. (Eq c) => HOTerm c -> HOTerm c
-normalize = fix completeBetaReduce
-  where
-    completeEtaExpand :: HOTerm c -> HOTerm c
-    completeEtaExpand (Lam t)   = etaExpand (Lam (completeEtaExpand t))
-    completeEtaExpand (s :@: t) = etaExpand
-                                  (completeEtaExpand s :@: completeEtaExpand t)
-    completeEtaExpand other     = etaExpand other
-
-    fix :: (Eq a) => (a -> a) -> (a -> a)
+    fix :: (Eq a) => (a -> a) -> a -> a
     fix f x = let x' = f x
               in if x == x' then x else fix f x'
 
-combinatorS, combinatorK, combinatorI :: HOTerm c
-combinatorS = Lam (Lam (Lam (Var 2 :@: Var 0 :@: (Var 1 :@: Var 0))))
-combinatorK = Lam (Lam (Var 1))
-combinatorI = Lam (Var 0)
+normalize :: (Eq v) => HOTerm v -> HOTerm v
+normalize = betaReduce .> etaExpand
+
+combinatorS, combinatorK, combinatorI :: IO (HOTerm (Variable Void))
+combinatorS
+  = Lam (Star :-> Star :-> Star) 'x'
+    (Lam (Star :-> Star) 'y'
+     (Lam Star 'z'
+      (Var 'x' :@: Var 'z' :@: (Var 'y' :@: Var 'z'))))
+    |> uniquify
+    |> fmap (fmap (error ""))
+combinatorK
+  = lam Star 'x' (lam Star 'y' (Var 'x'))
+    |> uniquify
+combinatorI
+  = lam Star 'x' (Var 'x')
+    |> uniquify
+
+churchNatural :: Int -> IO (HOTerm (Variable v))
+churchNatural = uniquify
+                . lam (Star :-> Star) 'f'
+                . lam Star 'x'
+                . go (Var 'x')
+  where
+    go t 0 = t
+    go t n = go (Var 'f' :@: t) (n - 1)
+
+churchPlus :: IO (HOTerm (Variable v))
+churchPlus = lam (Star :-> Star :-> Star) 'm'
+             (lam (Star :-> Star :-> Star) 'n'
+              (lam Star 'f'
+               (lam Star 'x'
+                (Var 'm' :@: Var 'f' :@: (Var 'n' :@: Var 'f' :@: Var 'x')))))
+             |> uniquify
+
+allEqual :: (Eq a) => [a] -> Bool
+allEqual []             = True
+allEqual [_]            = True
+allEqual (x : y : rest) = (x == y) && allEqual (y : rest)
 
 data TestResult a
   = Success
-  | Failure (a, a)
+  | Failure a
   deriving (Eq, Ord, Show, Read)
 
-normalizeTest :: [TestResult (HOTerm Void)]
-normalizeTest = [ ( normalize (combinatorS :@: combinatorK :@: combinatorK)
-                  , combinatorI
-                  )
-                ] |> map (\(x, y) -> if x == y then Success else Failure (x, y))
-
-
--- subst :: (Int, HOTerm c) -> HOTerm c -> HOTerm c
--- subst (var, replacement)
---   = \case (Var n)   -> if n == var
---                        then replacement
---                        else Var n
---           (Const c) -> Const c
---           (App s t) -> let f = subst (var, replacement)
---                        in App (f s) (f t)
---           (Lam t)   -> Lam (subst (var, replacement) t)
---
--- whnf :: forall c. HOTerm c -> HOTerm c
--- whnf = go 0
---   where
---     go :: Int -> HOTerm c -> HOTerm c
---     go n (App (Lam s) t) =
+normalizeTest :: IO [TestResult [HOTerm (Variable Void)]]
+normalizeTest = do
+  let s = combinatorS
+  let k = combinatorK
+  let i = combinatorI
+  id ( [ [ (s :@: k :@: k)
+         , i
+         ]
+       , [ (s
+            :@: (k :@: (s :@: i))
+            :@: (s :@: (k :@: k) :@: i)
+            :@: k
+            :@: k)
+         , (k :@: k)
+         ]
+       , [ (s
+            :@: (k :@: (s :@: i))
+            :@: (s :@: (k :@: k) :@: i))
+         , (s :@: (k :@: (s :@: i)) :@: k)
+         ]
+       , [ churchPlus
+           :@: churchNatural 15
+           :@: churchNatural 10
+         , churchNatural 25
+         ]
+       -- , [ churchPlus
+       --     :@: churchNatural 1515
+       --     :@: churchNatural 2525
+       --   , churchNatural 4040
+       --   ]
+       ] |> (map (\xs -> let xs' = map betaReduce xs
+                         in if allEqual xs' && isInBNF (head xs')
+                            then Success
+                            else Failure xs)
+             .> _)
+     )
